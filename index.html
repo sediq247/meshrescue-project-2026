@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>MeshRescue | Vertex Swarm System</title>
+
+    <link rel="stylesheet" href="frontend/style.css"/>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+<!-- ================= HEADER ================= -->
+<header class="header">
+
+    <div class="logo">
+        <h1>MeshRescue</h1>
+        <div class="tagline">Vertex Swarm Coordination System</div>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-item">
+            <span class="label">Agents</span>
+            <span id="agentCount" class="value">0</span>
+        </div>
+
+        <div class="status-item">
+            <span class="label">Network</span>
+            <span id="networkStatus" class="value offline">Offline</span>
+        </div>
+
+        <div class="status-item">
+            <span class="label">Swarm State</span>
+            <span id="swarmState" class="value">Idle</span>
+        </div>
+    </div>
+
+</header>
+
+<!-- ================= MAIN ================= -->
+<div class="main">
+
+    <!-- ===== MAP SECTION ===== -->
+    <section class="map-section">
+
+        <div class="map-header">
+            <h2>Swarm Operations Map</h2>
+            <div class="map-info">
+                Real-time emergency coordination grid
+            </div>
+        </div>
+
+        <div class="canvas-wrapper">
+            <canvas id="swarmCanvas" width="900" height="600"></canvas>
+        </div>
+
+        <div class="map-footer">
+            <span id="zoneInfo">Zones: loading...</span>
+        </div>
+
+    </section>
+
+    <!-- ===== SIDE PANEL ===== -->
+    <aside class="side-panel">
+
+        <!-- CONTROLS -->
+        <div class="panel">
+            <h3>Control Panel</h3>
+
+            <button id="startBtn" class="btn primary">Start Swarm</button>
+            <button id="pauseBtn" class="btn">Pause Swarm</button>
+            <button id="killAgentBtn" class="btn warning">Disable Random Agent</button>
+            <button id="resetBtn" class="btn danger">Reset System</button>
+        </div>
+
+        <!-- METRICS -->
+        <div class="panel">
+            <h3>Live Metrics</h3>
+
+            <div class="metric">
+                <span>Active Agents</span>
+                <strong id="activeAgents">0</strong>
+            </div>
+
+            <div class="metric">
+                <span>Tasks Assigned</span>
+                <strong id="tasksAssigned">0</strong>
+            </div>
+
+            <div class="metric">
+                <span>Completed Tasks</span>
+                <strong id="tasksCompleted">0</strong>
+            </div>
+
+            <div class="metric">
+                <span>Failures</span>
+                <strong id="failures">0</strong>
+            </div>
+        </div>
+
+        <!-- LOGS -->
+        <div class="panel logs-panel">
+            <h3>Swarm Logs</h3>
+            <div id="logs"></div>
+        </div>
+
+    </aside>
+
+</div>
+
+<!-- ================= FOOTER ================= -->
+<footer class="footer">
+    MeshRescue © 2026 | Vertex Swarm Challenge
+</footer>
+
+<!-- ================= SCRIPTS ================= -->
+<script src="frontend/main.js"></script>
+<script src="frontend/agents.js"></script>
+<script src="frontend/protocol.js"></script>
+
+</body>
+</html>

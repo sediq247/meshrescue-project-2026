@@ -1,0 +1,20 @@
+{
+    "name": "meshrescue System",
+    "version": "1.0.0",
+    "description": "MeshRescue | Vertex Swarm Coordination System - Real-time WebSocket swarm intelligence simulation",
+    "type": "module",
+    "main": "backend/server.js",
+    "scripts": {
+        "start": "node backend/server.js"
+    },
+    
+    "author": "MeshRescue Team",
+    "license": "MIT",
+    "dependencies": {
+        "express": "^4.22.1",
+        "ws": "^8.20.0"
+    },
+    "engines": {
+        "node": ">=18"
+    }
+}
