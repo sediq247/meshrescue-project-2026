@@ -1,29 +1,14 @@
-// MeshRescue | Vertex Swarm Intelligence (FINAL NETWORKED BUILD)
+agents.js
+// MeshRescue | WebSocket + Swarm Hybrid Intelligence (FINAL STABLE BUILD)
 
 (function () {
 
-    // ===============================
-    // WEBSOCKET BRIDGE
-    // ===============================
-    const socket = new WebSocket(
-        location.hostname === "localhost"
-            ? "ws://localhost:3007"
-            : `wss://${location.host}`
-    );
+    if (!window.MeshProtocol) {
+        console.error("Protocol not loaded!");
+        return;
+    }
 
-    window.MeshSocket = socket;
-
-    socket.onopen = () => {
-        console.log("🟢 Swarm connected to server");
-    };
-
-    socket.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-
-        window.dispatchEvent(new CustomEvent("mesh-msg", {
-            detail: msg
-        }));
-    };
+    const Protocol = window.MeshProtocol;
 
     // ===============================
     // GLOBAL STATE
@@ -35,6 +20,88 @@
         "Aegis-01", "Vanguard-02", "Sentinel-03", "Orion-04", "Atlas-05",
         "Nova-06", "Echo-07", "Helix-08", "Pulse-09", "Titan-10"
     ];
+
+    // ===============================
+    // WEBSOCKET (AUTO RECONNECT)
+    // ===============================
+    let socket;
+
+    function connectSocket() {
+
+        socket = new WebSocket(
+            location.protocol === "https:"
+                ? "wss://" + location.host
+                : "ws://" + location.host
+        );
+
+        socket.onopen = () => {
+            console.log("🟢 Connected to Swarm Server");
+        };
+
+        socket.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            handleServerMessage(msg);
+        };
+
+        socket.onclose = () => {
+            console.log("🔴 Disconnected... reconnecting");
+            setTimeout(connectSocket, 2000);
+        };
+    }
+
+    function safeSend(data) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify(data));
+        } else {
+            setTimeout(() => safeSend(data), 100);
+        }
+    }
+
+    connectSocket();
+
+    // ===============================
+    // SERVER MESSAGE HANDLER
+    // ===============================
+    function handleServerMessage(msg) {
+
+        switch (msg.type) {
+
+            case "INIT":
+                window.globalTasks = msg.tasks || [];
+                break;
+
+            case "TASK_CREATED":
+                window.globalTasks.push(msg.task);
+
+                // 🔥 Sync into P2P layer
+                Protocol.announceTask(msg.task);
+                break;
+
+            case "TASK_CLAIMED":
+                updateTask(msg.taskId, { claimedBy: msg.agentId });
+
+                // 🔥 Sync into P2P layer
+                Protocol.claimTask(msg.agentId, msg.taskId);
+                break;
+
+            case "TASK_COMPLETED":
+                updateTask(msg.taskId, { completed: true });
+
+                // 🔥 Sync into P2P layer
+                Protocol.completeTask(msg.agentId, msg.taskId);
+                break;
+
+            case "TASK_RELEASED":
+                updateTask(msg.taskId, { claimedBy: null });
+                break;
+        }
+    }
+
+    function updateTask(taskId, updates) {
+        const task = window.globalTasks.find(t => t.id === taskId);
+        if (!task) return;
+        Object.assign(task, updates);
+    }
 
     // ===============================
     // CREATE AGENTS
@@ -56,21 +123,25 @@
                 claimedTask: null,
 
                 knownTasks: new Map(),
+                knownPeers: new Set(),
                 lastClaimTime: 0
             };
 
             window.swarmAgents.push(agent);
 
-            // REGISTER TO SERVER
-            socket.send(JSON.stringify({
+            // 🔥 REGISTER TO SERVER
+            safeSend({
                 type: "REGISTER",
                 id: agent.id
-            }));
+            });
+
+            // 🔥 REGISTER TO P2P MESH
+            Protocol.registerAgent(agent);
         }
     }
 
     // ===============================
-    // TASK DECISION ENGINE
+    // DECISION ENGINE
     // ===============================
     function agentDecision(agent) {
 
@@ -79,7 +150,7 @@
         let bestTask = null;
         let bestScore = Infinity;
 
-        agent.knownTasks.forEach(task => {
+        window.globalTasks.forEach(task => {
 
             if (!task || task.claimedBy || task.completed) return;
 
@@ -87,7 +158,7 @@
             const dy = task.location.y - agent.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
-            const score = dist + Math.random() * 5;
+            const score = dist + (Math.random() * 5);
 
             if (score < bestScore) {
                 bestScore = score;
@@ -105,11 +176,14 @@
         agent.claimedTask = bestTask;
         agent.lastClaimTime = now;
 
-        // SEND CLAIM TO SERVER
-        socket.send(JSON.stringify({
+        // 🔥 SERVER CLAIM
+        safeSend({
             type: "CLAIM_TASK",
             taskId: bestTask.id
-        }));
+        });
+
+        // 🔥 P2P CLAIM
+        Protocol.claimTask(agent.id, bestTask.id);
     }
 
     // ===============================
@@ -127,10 +201,12 @@
 
                 if (agent.claimedTask) {
 
-                    socket.send(JSON.stringify({
+                    safeSend({
                         type: "COMPLETE_TASK",
                         taskId: agent.claimedTask.id
-                    }));
+                    });
+
+                    Protocol.completeTask(agent.id, agent.claimedTask.id);
                 }
 
                 agent.status = "idle";
@@ -140,6 +216,13 @@
             } else {
                 agent.x += (dx / dist) * agent.speed;
                 agent.y += (dy / dist) * agent.speed;
+
+                // 🔥 SYNC MOVEMENT
+                safeSend({
+                    type: "MOVE",
+                    x: agent.x,
+                    y: agent.y
+                });
             }
 
         } else {
@@ -153,19 +236,16 @@
     // ===============================
     function randomFailure() {
 
-        if (Math.random() < 0.003) {
+        if (Math.random() < 0.004) {
 
             const alive = window.swarmAgents.filter(a => a.status !== "dead");
             if (!alive.length) return;
 
             const agent = alive[Math.floor(Math.random() * alive.length)];
+
             agent.status = "dead";
 
-            // notify server
-            socket.send(JSON.stringify({
-                type: "AGENT_FAIL",
-                id: agent.id
-            }));
+            Protocol.removeAgent(agent.id);
         }
     }
 
@@ -183,49 +263,6 @@
 
         randomFailure();
     }
-
-    // ===============================
-    // SERVER EVENT HANDLER
-    // ===============================
-    window.addEventListener("mesh-msg", (e) => {
-
-        const msg = e.detail;
-
-        switch (msg.type) {
-
-            case "INIT":
-                window.swarmAgents = msg.agents;
-                window.globalTasks = msg.tasks;
-                break;
-
-            case "TASK_CREATED":
-                window.globalTasks.push(msg.task);
-                break;
-
-            case "TASK_CLAIMED":
-                const t1 = window.globalTasks.find(t => t.id === msg.taskId);
-                if (t1) t1.claimedBy = msg.agentId;
-                break;
-
-            case "TASK_COMPLETED":
-                const t2 = window.globalTasks.find(t => t.id === msg.taskId);
-                if (t2) t2.completed = true;
-                break;
-
-            case "AGENT_LEFT":
-                const a1 = window.swarmAgents.find(a => a.id === msg.id);
-                if (a1) a1.status = "dead";
-                break;
-
-            case "AGENT_MOVED":
-                const a2 = window.swarmAgents.find(a => a.id === msg.id);
-                if (a2) {
-                    a2.x = msg.x;
-                    a2.y = msg.y;
-                }
-                break;
-        }
-    });
 
     // ===============================
     // START SYSTEM

@@ -1,5 +1,5 @@
 protocol.js
-// MeshRescue | Vertex Swarm Protocol Layer (ELITE FINAL VERSION)
+// MeshRescue | Vertex Swarm Protocol Layer 
 
 (function () {
 
