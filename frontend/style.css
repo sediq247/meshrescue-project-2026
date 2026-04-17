@@ -1,5 +1,5 @@
 /* ===============================
-   RESET + CORE
+   RESET & BASE
 ================================= */
 * {
     margin: 0;
@@ -9,153 +9,202 @@
 
 body {
     font-family: "Poppins", sans-serif;
-    background: radial-gradient(circle at top, #020617, #000);
+    background: radial-gradient(circle at top, #020617, #000000);
     color: #e2e8f0;
     overflow: hidden;
 }
 
 /* ===============================
-   HEADER (SWARM COMMAND CENTER)
+   HEADER
 ================================= */
-header {
+.header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 24px;
-    background: rgba(2, 6, 23, 0.97);
+    padding: 14px 22px;
+    background: rgba(2, 6, 23, 0.92);
     border-bottom: 1px solid #1e293b;
     backdrop-filter: blur(14px);
 }
 
-header h1 {
+/* LOGO */
+.logo h1 {
     font-family: "Orbitron", sans-serif;
     font-size: 26px;
+    letter-spacing: 2px;
     background: linear-gradient(90deg, #22c55e, #38bdf8, #facc15);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
+.tagline {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+/* ===============================
+   STATUS BAR (IMPORTANT FIX)
+================================= */
+.status-bar {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.status-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.status-item .label {
+    font-size: 10px;
+    color: #64748b;
+}
+
+.status-item .value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #38bdf8;
+}
+
+.status-item .value.offline {
+    color: #ef4444;
+}
+
 /* ===============================
    MAIN LAYOUT
 ================================= */
-main {
+.main {
     display: flex;
     height: calc(100vh - 70px);
-    gap: 10px;
+    gap: 12px;
+    padding: 12px;
 }
 
 /* ===============================
    MAP SECTION
 ================================= */
-section {
+.map-section {
     flex: 3;
     display: flex;
     flex-direction: column;
-    padding: 14px;
+    gap: 10px;
 }
 
-#zoneInfo {
+.map-header h2 {
+    font-size: 18px;
+    color: #38bdf8;
+}
+
+.map-info {
     font-size: 12px;
     color: #64748b;
 }
 
-/* ===============================
-   CANVAS (SWARM FIELD)
-================================= */
+/* CANVAS */
 .canvas-wrapper {
     flex: 1;
-    position: relative;
-    border-radius: 14px;
+    border-radius: 12px;
     overflow: hidden;
     border: 1px solid #1e293b;
-
-    box-shadow:
-        0 0 25px rgba(56, 189, 248, 0.08),
-        inset 0 0 60px rgba(0,0,0,0.5);
+    background: #020617;
+    position: relative;
+    box-shadow: 0 0 25px rgba(56, 189, 248, 0.08);
 }
 
 canvas {
     width: 100%;
     height: 100%;
     display: block;
-    background:
-        radial-gradient(circle at center, rgba(56,189,248,0.06), transparent 60%),
-        #020617;
 }
 
-/* ===============================
-   LIVE GRID + ENERGY FIELD
-================================= */
-.canvas-wrapper::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background-image:
-        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-    background-size: 50px 50px;
-    animation: gridPulse 5s infinite linear;
-    pointer-events: none;
-}
-
-@keyframes gridPulse {
-    0% { opacity: 0.25; }
-    50% { opacity: 0.12; }
-    100% { opacity: 0.25; }
-}
-
-/* ===============================
-   SWARM STATUS BADGE (NEW)
-================================= */
-.swarm-status {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    padding: 6px 10px;
+/* FOOTER */
+.map-footer {
     font-size: 11px;
-    border-radius: 6px;
-    background: rgba(0,0,0,0.6);
-    border: 1px solid #1e293b;
-    color: #38bdf8;
+    color: #64748b;
 }
 
 /* ===============================
-   RIGHT CONTROL PANEL
+   SIDE PANEL
 ================================= */
-aside {
+.side-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 14px;
     gap: 12px;
+    padding: 12px;
     border-left: 1px solid #1e293b;
-    background: rgba(2, 6, 23, 0.92);
+    background: rgba(2, 6, 23, 0.85);
     overflow-y: auto;
 }
 
-/* PANEL CARDS */
-aside > div {
-    background: rgba(2, 6, 23, 0.92);
+/* PANELS */
+.panel {
+    background: rgba(2, 6, 23, 0.88);
     border: 1px solid #1e293b;
     border-radius: 12px;
     padding: 12px;
+    backdrop-filter: blur(10px);
 }
 
 /* TITLES */
-aside h3 {
+.panel h3 {
     font-size: 13px;
     color: #38bdf8;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 
 /* ===============================
-   METRICS (UPGRADED VISUAL SIGNALS)
+   BUTTONS (FIXED .btn SUPPORT)
+================================= */
+button,
+.btn {
+    width: 100%;
+    padding: 10px;
+    margin-top: 8px;
+    border-radius: 8px;
+    border: none;
+    background: #1e293b;
+    color: #e2e8f0;
+    cursor: pointer;
+    font-weight: 500;
+    transition: 0.2s ease;
+}
+
+button:hover,
+.btn:hover {
+    background: #334155;
+    transform: translateY(-1px);
+}
+
+/* PRIMARY */
+.primary {
+    background: #38bdf8;
+    color: #020617;
+    font-weight: 700;
+}
+
+/* DANGER */
+.danger {
+    background: #ef4444;
+}
+
+/* WARNING */
+.warning {
+    background: #f59e0b;
+    color: #000;
+}
+
+/* ===============================
+   METRICS
 ================================= */
 .metric {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
-    margin-bottom: 6px;
+    font-size: 13px;
+    margin-bottom: 8px;
 }
 
 .metric strong {
@@ -163,51 +212,22 @@ aside h3 {
 }
 
 /* ===============================
-   BUTTONS (CONTROL ROOM STYLE)
+   LOGS
 ================================= */
-button {
-    width: 100%;
-    padding: 10px;
-    margin-top: 6px;
-    border-radius: 10px;
-    border: 1px solid #1e293b;
-    background: #0f172a;
-    color: #e2e8f0;
-    cursor: pointer;
-    transition: 0.2s ease;
+.logs-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
-button:hover {
-    transform: translateY(-1px);
-    background: #1e293b;
-}
-
-button.primary {
-    background: #38bdf8;
-    color: #020617;
-    font-weight: bold;
-}
-
-button.danger {
-    background: #ef4444;
-}
-
-button.warning {
-    background: #f59e0b;
-    color: #000;
-}
-
-/* ===============================
-   LOGS (DEBUG CONSOLE)
-================================= */
 #logs {
     flex: 1;
     background: #000;
-    padding: 10px;
-    border-radius: 10px;
+    border-radius: 8px;
     border: 1px solid #1e293b;
-    font-size: 11px;
+    padding: 10px;
     overflow-y: auto;
+    font-size: 11px;
 }
 
 #logs p {
@@ -215,51 +235,55 @@ button.warning {
     color: #94a3b8;
 }
 
-/* ===============================
-   MINIMAP RADAR (FINAL BOSS FEATURE)
-================================= */
-.minimap {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 150px;
-    height: 110px;
-    background: rgba(0,0,0,0.65);
-    border: 1px solid rgba(56,189,248,0.4);
-    border-radius: 10px;
-    overflow: hidden;
-    pointer-events: none;
-}
-
-/* PULSE DOT EFFECT (FOR FUTURE USE) */
-.radar-ping {
-    position: absolute;
+/* SCROLLBAR */
+#logs::-webkit-scrollbar {
     width: 6px;
-    height: 6px;
-    background: #22c55e;
-    border-radius: 50%;
-    animation: ping 1.5s infinite;
 }
 
-@keyframes ping {
-    0% { transform: scale(1); opacity: 1; }
-    100% { transform: scale(3); opacity: 0; }
+#logs::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 3px;
+}
+
+/* ===============================
+   FOOTER
+================================= */
+.footer {
+    text-align: center;
+    padding: 8px;
+    font-size: 11px;
+    color: #64748b;
+    border-top: 1px solid #1e293b;
+    background: rgba(2, 6, 23, 0.9);
 }
 
 /* ===============================
    RESPONSIVE
 ================================= */
 @media (max-width: 900px) {
-    main {
+    .main {
         flex-direction: column;
+        height: auto;
     }
 
-    aside {
+    .side-panel {
         flex-direction: row;
         overflow-x: auto;
     }
 
-    aside > div {
-        min-width: 240px;
+    .panel {
+        min-width: 260px;
     }
+}
+
+/* GLOBAL ANIMATION FEEL */
+button,
+.panel,
+.canvas-wrapper {
+    transition: all 0.2s ease;
+}
+
+/* NO TEXT SELECT */
+body, button {
+    user-select: none;
 }
