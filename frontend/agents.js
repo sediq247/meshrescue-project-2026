@@ -7,7 +7,7 @@
     // ===============================
     const socket = new WebSocket(
         location.hostname === "localhost"
-            ? "ws://localhost:3000"
+            ? "ws://localhost:3007"
             : `wss://${location.host}`
     );
 
