@@ -13,12 +13,11 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Required for ES modules (handling backend/ subfolder)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ===============================
-// STATIC FRONTEND (ROOT PROJECT)
+// STATIC FRONTEND
 // ===============================
 app.use(express.static(path.join(__dirname, "../")));
 
@@ -27,10 +26,10 @@ app.get("/", (req, res) => {
 });
 
 // ===============================
-// STATE & CONFIG
+// STATE
 // ===============================
-const agents = new Map();   
-const tasks = [];           
+const agents = new Map();
+const tasks = [];
 
 const TASK_POOL = [
     { name: "Hospital Emergency", x: 120, y: 150 },
@@ -41,23 +40,24 @@ const TASK_POOL = [
 ];
 
 // ===============================
-// CORE FUNCTIONS
+// BROADCAST
 // ===============================
-
 function broadcast(payload) {
-    // Safety check to prevent "cannot access before initialization"
-    if (!wss || !wss.clients) return;
-
     const data = JSON.stringify(payload);
+
     wss.clients.forEach((client) => {
-        if (client.readyState === 1) { // 1 = OPEN
+        if (client.readyState === 1) {
             client.send(data);
         }
     });
 }
 
+// ===============================
+// TASK CREATION
+// ===============================
 function createTask() {
     const base = TASK_POOL[Math.floor(Math.random() * TASK_POOL.length)];
+
     const task = {
         id: "T" + Date.now(),
         location: base,
@@ -67,83 +67,154 @@ function createTask() {
     };
 
     tasks.push(task);
+
     broadcast({ type: "TASK_CREATED", task });
+
     console.log(`📍 Task injected into swarm: ${task.id}`);
 }
 
+// ===============================
+// CLEANUP
+// ===============================
 function cleanupTasks() {
     for (const task of tasks) {
         if (task.claimedBy && !agents.has(task.claimedBy)) {
             task.claimedBy = null;
+
+            // FIX: ensure frontend compatibility
             broadcast({ type: "TASK_RELEASED", taskId: task.id });
         }
     }
 }
 
 // ===============================
-// WEBSOCKET LOGIC
+// WEBSOCKET
 // ===============================
 wss.on("connection", (ws) => {
     let agentId = null;
+
     console.log("🟢 New WebSocket agent connected");
 
     ws.on("message", (raw) => {
-        let msg;
-        try { msg = JSON.parse(raw); } catch { return; }
 
+        let msg;
+        try {
+            msg = JSON.parse(raw);
+        } catch {
+            return;
+        }
+
+        // ===========================
+        // REGISTER
+        // ===========================
         if (msg.type === "REGISTER") {
+
             agentId = msg.id;
-            agents.set(agentId, { id: agentId, x: 0, y: 0, status: "idle" });
-            
+
+            agents.set(agentId, {
+                id: agentId,
+                x: 0,
+                y: 0,
+                status: "idle"
+            });
+
             ws.send(JSON.stringify({
                 type: "INIT",
                 agents: Array.from(agents.values()),
-                tasks
+                tasks: JSON.parse(JSON.stringify(tasks)) // FIX: safe clone
             }));
 
-            broadcast({ type: "AGENT_JOINED", agent: agents.get(agentId) });
+            broadcast({
+                type: "AGENT_JOINED",
+                agent: agents.get(agentId)
+            });
         }
 
+        // ===========================
+        // MOVE (FIXED VALIDATION)
+        // ===========================
         if (msg.type === "MOVE") {
+
             const agent = agents.get(agentId);
             if (!agent) return;
+
+            if (typeof msg.x !== "number" || typeof msg.y !== "number") return;
+
             agent.x = msg.x;
             agent.y = msg.y;
-            broadcast({ type: "AGENT_MOVED", id: agentId, x: msg.x, y: msg.y });
+
+            broadcast({
+                type: "AGENT_MOVED",
+                id: agentId,
+                x: msg.x,
+                y: msg.y
+            });
         }
 
+        // ===========================
+        // CLAIM TASK (FIXED SAFETY)
+        // ===========================
         if (msg.type === "CLAIM_TASK") {
+
             const task = tasks.find(t => t.id === msg.taskId);
-            if (task && !task.claimedBy) {
+
+            if (task && !task.claimedBy && agentId) {
                 task.claimedBy = agentId;
-                broadcast({ type: "TASK_CLAIMED", taskId: task.id, agentId });
+
+                broadcast({
+                    type: "TASK_CLAIMED",
+                    taskId: task.id,
+                    agentId
+                });
             }
         }
 
+        // ===========================
+        // COMPLETE TASK (FIXED SAFETY)
+        // ===========================
         if (msg.type === "COMPLETE_TASK") {
+
             const task = tasks.find(t => t.id === msg.taskId);
-            if (task && !task.completed) {
+
+            if (task && !task.completed && task.claimedBy === agentId) {
                 task.completed = true;
-                broadcast({ type: "TASK_COMPLETED", taskId: task.id, agentId });
+
+                broadcast({
+                    type: "TASK_COMPLETED",
+                    taskId: task.id,
+                    agentId
+                });
             }
         }
     });
 
+    // ===============================
+    // DISCONNECT
+    // ===============================
     ws.on("close", () => {
+
         if (!agentId) return;
+
         agents.delete(agentId);
-        broadcast({ type: "AGENT_LEFT", id: agentId });
+
+        broadcast({
+            type: "AGENT_LEFT",
+            id: agentId
+        });
+
         cleanupTasks();
+
         console.log(`🔴 Agent disconnected: ${agentId}`);
     });
 });
 
 // ===============================
-// SERVER STARTUP
+// START SERVER
 // ===============================
-const PORT = process.env.PORT || 3007;
+const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
+
     console.log("⚡ MeshRescue WebSocket Swarm Engine Initializing...");
     console.log(`🚀 Server running on http://localhost:${PORT}`);
 

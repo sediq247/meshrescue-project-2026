@@ -1,4 +1,5 @@
-// MeshRescue | Enhanced Visualization Layer 
+main.js
+// MeshRescue | Enhanced Visualization Layer (CONTROLLED FINAL BUILD)
 
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -35,7 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let autoFollow = true;
 
     // ===============================
-    // LOG SYSTEM (MISSION STYLE)
+    // LOG SYSTEM
     // ===============================
     function log(msg) {
         const p = document.createElement("p");
@@ -45,7 +46,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // SAFE AUTO FIT
+    // AUTO FIT CAMERA
     // ===============================
     function autoFit() {
 
@@ -57,13 +58,12 @@ document.addEventListener("DOMContentLoaded", () => {
             ...agents
         ];
 
-        if (points.length === 0) return;
+        if (!points.length) return;
 
         let minX = Infinity, minY = Infinity;
         let maxX = -Infinity, maxY = -Infinity;
 
         points.forEach(p => {
-            if (!p) return;
             minX = Math.min(minX, p.x);
             minY = Math.min(minY, p.y);
             maxX = Math.max(maxX, p.x);
@@ -72,8 +72,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const padding = 150;
 
-        const width = Math.max(1, (maxX - minX) + padding);
-        const height = Math.max(1, (maxY - minY) + padding);
+        const width = (maxX - minX) + padding;
+        const height = (maxY - minY) + padding;
 
         const scaleX = canvas.width / width;
         const scaleY = canvas.height / height;
@@ -164,6 +164,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             ctx.beginPath();
             ctx.arc(agent.x, agent.y, 6, 0, Math.PI * 2);
+
             ctx.fillStyle = agent.status === "busy" ? "#f59e0b" : "#22c55e";
             ctx.fill();
 
@@ -194,7 +195,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // CAMERA FOLLOW (STABLE)
+    // CAMERA
     // ===============================
     function updateCamera() {
 
@@ -208,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tasks.forEach(t => t?.location && all.push(t.location));
         agents.forEach(a => all.push(a));
 
-        if (all.length === 0) return;
+        if (!all.length) return;
 
         let sx = 0, sy = 0;
 
@@ -225,7 +226,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // DRAW LOOP
+    // DRAW
     // ===============================
     function draw() {
 
@@ -244,19 +245,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // ANIMATION LOOP
-    // ===============================
-    function animate() {
-
-        if (!running) return;
-
-        updateCamera();
-        draw();
-
-        requestAnimationFrame(animate);
-    }
-
-    // ===============================
     // UI UPDATE
     // ===============================
     function updateUI() {
@@ -272,27 +260,58 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // CONTROLS
+    // MAIN LOOP
+    // ===============================
+    function animate() {
+
+        if (!running) return;
+
+        updateCamera();
+        updateUI();
+        draw();
+
+        requestAnimationFrame(animate);
+    }
+
+    // ===============================
+    // CONTROLS (🔥 FIXED CONNECTION)
     // ===============================
     startBtn.onclick = () => {
+
         if (running) return;
 
         running = true;
+
+        // 🔥 START SWARM ENGINE
+        window.SwarmControl?.start();
+
         swarmStateEl.textContent = "Running";
         networkStatusEl.textContent = "Online";
 
-        log("Swarm system activated");
+        log("🚀 Swarm system activated");
+        log("🧠 Agents deploying into Vertex Grid");
+
         animate();
     };
 
     pauseBtn.onclick = () => {
+
         running = false;
+
+        // 🔥 STOP SWARM ENGINE
+        window.SwarmControl?.stop();
+
         swarmStateEl.textContent = "Paused";
-        log("Swarm paused");
+
+        log("⏸️ Swarm paused");
     };
 
     resetBtn.onclick = () => {
+
         running = false;
+
+        // 🔥 RESET ENGINE
+        window.SwarmControl?.reset();
 
         zoom = 1;
         offsetX = 0;
@@ -304,10 +323,11 @@ document.addEventListener("DOMContentLoaded", () => {
         autoFit();
         draw();
 
-        log("System reset");
+        log("🔄 System reset complete");
     };
 
     killAgentBtn.onclick = () => {
+
         const agents = getAgents();
         const alive = agents.filter(a => a?.status !== "dead");
 
@@ -316,7 +336,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const agent = alive[Math.floor(Math.random() * alive.length)];
         agent.status = "dead";
 
-        log(`${agent.id} disabled`);
+        log(`☠️ ${agent.id} disabled`);
     };
 
     // ===============================
@@ -327,5 +347,8 @@ document.addEventListener("DOMContentLoaded", () => {
     autoFit();
     updateUI();
     draw();
+
+    // 🔥 LIVE UI REFRESH
+    setInterval(updateUI, 300);
 
 });

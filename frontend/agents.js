@@ -1,5 +1,4 @@
-agents.js
-// MeshRescue | WebSocket + Swarm Hybrid Intelligence (FINAL STABLE BUILD)
+// MeshRescue | WebSocket + Swarm Hybrid Intelligence (CONTROLLED FINAL BUILD)
 
 (function () {
 
@@ -72,22 +71,16 @@ agents.js
 
             case "TASK_CREATED":
                 window.globalTasks.push(msg.task);
-
-                // 🔥 Sync into P2P layer
                 Protocol.announceTask(msg.task);
                 break;
 
             case "TASK_CLAIMED":
                 updateTask(msg.taskId, { claimedBy: msg.agentId });
-
-                // 🔥 Sync into P2P layer
                 Protocol.claimTask(msg.agentId, msg.taskId);
                 break;
 
             case "TASK_COMPLETED":
                 updateTask(msg.taskId, { completed: true });
-
-                // 🔥 Sync into P2P layer
                 Protocol.completeTask(msg.agentId, msg.taskId);
                 break;
 
@@ -129,13 +122,11 @@ agents.js
 
             window.swarmAgents.push(agent);
 
-            // 🔥 REGISTER TO SERVER
             safeSend({
                 type: "REGISTER",
                 id: agent.id
             });
 
-            // 🔥 REGISTER TO P2P MESH
             Protocol.registerAgent(agent);
         }
     }
@@ -176,13 +167,11 @@ agents.js
         agent.claimedTask = bestTask;
         agent.lastClaimTime = now;
 
-        // 🔥 SERVER CLAIM
         safeSend({
             type: "CLAIM_TASK",
             taskId: bestTask.id
         });
 
-        // 🔥 P2P CLAIM
         Protocol.claimTask(agent.id, bestTask.id);
     }
 
@@ -217,7 +206,6 @@ agents.js
                 agent.x += (dx / dist) * agent.speed;
                 agent.y += (dy / dist) * agent.speed;
 
-                // 🔥 SYNC MOVEMENT
                 safeSend({
                     type: "MOVE",
                     x: agent.x,
@@ -242,7 +230,6 @@ agents.js
             if (!alive.length) return;
 
             const agent = alive[Math.floor(Math.random() * alive.length)];
-
             agent.status = "dead";
 
             Protocol.removeAgent(agent.id);
@@ -265,16 +252,54 @@ agents.js
     }
 
     // ===============================
-    // START SYSTEM
+    // CONTROL SYSTEM (IMPORTANT FIX)
     // ===============================
-    function startSwarm() {
-        setInterval(swarmLoop, 50);
+    let swarmInterval = null;
+    let initialized = false;
+
+    function startSwarmSystem() {
+
+        if (swarmInterval) return;
+
+        if (!initialized) {
+            createAgents(10);
+            initialized = true;
+            console.log("🧠 Agents initialized");
+        }
+
+        swarmInterval = setInterval(swarmLoop, 50);
+        console.log("🚀 Swarm Engine Started");
+    }
+
+    function stopSwarmSystem() {
+
+        if (!swarmInterval) return;
+
+        clearInterval(swarmInterval);
+        swarmInterval = null;
+
+        console.log("⏸️ Swarm Engine Stopped");
+    }
+
+    function resetSwarmSystem() {
+
+        stopSwarmSystem();
+
+        window.swarmAgents = [];
+        window.globalTasks = [];
+
+        initialized = false;
+
+        console.log("🔄 Swarm Reset Complete");
     }
 
     // ===============================
-    // INIT
+    // GLOBAL EXPORT
     // ===============================
-    createAgents(10);
-    startSwarm();
+    window.SwarmControl = {
+        start: startSwarmSystem,
+        stop: stopSwarmSystem,
+        reset: resetSwarmSystem
+    };
 
 })();

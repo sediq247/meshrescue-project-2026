@@ -1,20 +1,13 @@
-protocol.js
-// MeshRescue | Vertex Swarm Protocol Layer 
+// MeshRescue | Vertex Swarm Protocol Layer (STABLE FINAL BUILD)
 
 (function () {
 
-    // ===============================
-    // CORE MESH STATE
-    // ===============================
-    const peers = new Map();        // agentId -> agent state
-    const messageQueue = [];        // simulated network buffer
+    const peers = new Map();       
+    const messageQueue = [];        
 
-    const LATENCY = 35;             // realistic network delay (ms)
-    const PACKET_LOSS = 0.02;       // optimized realism (less chaos, more stability)
+    const LATENCY = 35;
+    const PACKET_LOSS = 0.02;
 
-    // ===============================
-    // SAFE UTIL
-    // ===============================
     function now() {
         return Date.now();
     }
@@ -27,14 +20,14 @@ protocol.js
     }
 
     // ===============================
-    // REGISTER / REMOVE AGENTS
+    // AGENT MANAGEMENT
     // ===============================
     function registerAgent(agent) {
         if (!agent?.id) return;
 
         peers.set(agent.id, agent);
 
-        broadcast({
+        simulateBroadcast({
             type: "DISCOVERY",
             from: agent.id,
             payload: { id: agent.id }
@@ -44,20 +37,19 @@ protocol.js
     function removeAgent(agentId) {
         peers.delete(agentId);
 
-        broadcast({
+        simulateBroadcast({
             type: "NODE_DOWN",
             from: agentId
         });
     }
 
     // ===============================
-    // NETWORK EMULATION LAYER
+    // NETWORK LAYER (SIMULATED)
     // ===============================
-    function broadcast(message) {
+    function simulateBroadcast(message) {
 
         setTimeout(() => {
 
-            // simulate packet loss (real-world realism, but controlled)
             if (Math.random() < PACKET_LOSS) return;
 
             pushMessage(message);
@@ -87,12 +79,11 @@ protocol.js
 
         for (const msg of queue) {
 
-            // optional visibility for judges/debugging
             console.log(`📡 [MESH] ${msg.type}`, msg.from || "system");
 
-            peers.forEach((agent, id) => {
+            peers.forEach((agent) => {
 
-                if (msg.to && msg.to !== id) return;
+                if (msg.to && msg.to !== agent.id) return;
 
                 handleMessage(agent, msg);
             });
@@ -100,74 +91,51 @@ protocol.js
     }
 
     // ===============================
-    // MESSAGE HANDLER (CORE INTELLIGENCE)
+    // MESSAGE HANDLER
     // ===============================
     function handleMessage(agent, msg) {
 
         if (!agent) return;
 
-        // ensure structures exist
-        if (!agent.knownTasks) agent.knownTasks = new Map();
-        if (!agent.knownPeers) agent.knownPeers = new Set();
-        if (!agent.lastSeen) agent.lastSeen = {};
+        // SAFE INIT (CRITICAL FIX)
+        agent.knownTasks = agent.knownTasks || new Map();
+        agent.knownPeers = agent.knownPeers || new Set();
+        agent.lastSeen = agent.lastSeen || {};
 
         switch (msg.type) {
 
-            // -------------------------------
-            // NODE DISCOVERY
-            // -------------------------------
             case "DISCOVERY":
                 agent.knownPeers.add(msg.payload.id);
                 break;
 
-            // -------------------------------
-            // TASK PROPAGATION
-            // -------------------------------
             case "TASK_ANNOUNCE":
                 agent.knownTasks.set(msg.payload.id, msg.payload);
                 break;
 
-            // -------------------------------
-            // TASK CLAIM (FIRST-COME RULE)
-            // -------------------------------
             case "TASK_CLAIM": {
-                const taskId = msg.payload.taskId;
-                const task = agent.knownTasks.get(taskId);
-
+                const task = agent.knownTasks.get(msg.payload.taskId);
                 if (task && !task.claimedBy) {
                     task.claimedBy = msg.from;
                 }
                 break;
             }
 
-            // -------------------------------
-            // TASK COMPLETION
-            // -------------------------------
             case "TASK_COMPLETE": {
-                const taskId = msg.payload.taskId;
-                const task = agent.knownTasks.get(taskId);
-
+                const task = agent.knownTasks.get(msg.payload.taskId);
                 if (task) {
                     task.completed = true;
                 }
                 break;
             }
 
-            // -------------------------------
-            // HEARTBEAT SIGNALS
-            // -------------------------------
             case "HEARTBEAT":
                 agent.lastSeen[msg.from] = now();
                 break;
 
-            // -------------------------------
-            // NODE FAILURE HANDLING
-            // -------------------------------
             case "NODE_DOWN":
 
                 agent.knownPeers.delete(msg.from);
 
-                // release tasks held by failed node
                 agent.knownTasks.forEach(task => {
                     if (task.claimedBy === msg.from) {
                         task.claimedBy = null;
@@ -180,24 +148,22 @@ protocol.js
     }
 
     // ===============================
-    // HEARTBEAT SYSTEM (OPTIMIZED)
+    // HEARTBEAT (STABLE VERSION)
     // ===============================
     function heartbeat() {
 
         peers.forEach((agent, id) => {
 
-            // reduced spam → more realistic network behavior
-            if (Math.random() < 0.15) {
-                broadcast({
-                    type: "HEARTBEAT",
-                    from: id
-                });
-            }
+            simulateBroadcast({
+                type: "HEARTBEAT",
+                from: id
+            });
+
         });
     }
 
     // ===============================
-    // FAILURE DETECTION (CONSENSUS CLEANUP)
+    // FAILURE DETECTION (SAFE)
     // ===============================
     function detectFailures() {
 
@@ -205,11 +171,11 @@ protocol.js
 
         peers.forEach((agent) => {
 
-            Object.keys(agent.lastSeen).forEach(peerId => {
+            Object.keys(agent.lastSeen || {}).forEach(peerId => {
 
                 if (current - agent.lastSeen[peerId] > 7000) {
 
-                    broadcast({
+                    simulateBroadcast({
                         type: "NODE_DOWN",
                         from: peerId
                     });
@@ -221,11 +187,11 @@ protocol.js
     }
 
     // ===============================
-    // TASK API LAYER (IMPORTANT BINDING)
+    // TASK API
     // ===============================
     function announceTask(task) {
 
-        broadcast({
+        simulateBroadcast({
             type: "TASK_ANNOUNCE",
             from: "system",
             payload: task
@@ -234,7 +200,7 @@ protocol.js
 
     function claimTask(agentId, taskId) {
 
-        broadcast({
+        simulateBroadcast({
             type: "TASK_CLAIM",
             from: agentId,
             payload: { taskId }
@@ -243,7 +209,7 @@ protocol.js
 
     function completeTask(agentId, taskId) {
 
-        broadcast({
+        simulateBroadcast({
             type: "TASK_COMPLETE",
             from: agentId,
             payload: { taskId }
@@ -251,7 +217,7 @@ protocol.js
     }
 
     // ===============================
-    // MAIN SWARM PROTOCOL LOOP
+    // MAIN LOOP (SAFE INIT)
     // ===============================
     function protocolLoop() {
         processMessages();
@@ -259,10 +225,14 @@ protocol.js
         detectFailures();
     }
 
-    setInterval(protocolLoop, 120);
+    // Prevent duplicate intervals (IMPORTANT FIX)
+    if (!window.__protocolLoopStarted) {
+        window.__protocolLoopStarted = true;
+        setInterval(protocolLoop, 120);
+    }
 
     // ===============================
-    // EXPORT GLOBAL API
+    // GLOBAL EXPORT
     // ===============================
     window.MeshProtocol = {
         registerAgent,
@@ -271,7 +241,7 @@ protocol.js
         claimTask,
         completeTask,
         send,
-        broadcast
+        broadcast: simulateBroadcast
     };
 
 })();
