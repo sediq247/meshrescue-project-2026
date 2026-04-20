@@ -1,4 +1,3 @@
-main.js
 // MeshRescue | Enhanced Visualization Layer (CONTROLLED FINAL BUILD)
 
 document.addEventListener("DOMContentLoaded", () => {
