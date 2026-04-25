@@ -1,101 +1,252 @@
-// MeshRescue | WebSocket Swarm Coordination Core (FINAL DEPLOY VERSION)
-
 import express from "express";
 import http from "http";
 import { WebSocketServer } from "ws";
 import path from "path";
 import { fileURLToPath } from "url";
+import crypto from "crypto";
+import dotenv from "dotenv";
 
-// ===============================
-// INITIALIZATION
-// ===============================
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+dotenv.config();
+
+import { CONFIG } from "../shared/config.js";
+import { EVENT_TYPES } from "../shared/events.js";
+import { Logger } from "../shared/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ===============================
-// STATIC FRONTEND
+// VERTEX AI CONFIG
 // ===============================
+const VERTEX_API_KEY = process.env.VERTEX_API_KEY;
+const VERTEX_MODEL = process.env.VERTEX_MODEL || "gemini-1.5-flash";
+
+// ===============================
+// EXPRESS SERVER INIT
+// ===============================
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
+
 app.use(express.static(path.join(__dirname, "../")));
 
-app.get("/", (req, res) => {
+app.get("/", (_, res) => {
     res.sendFile(path.join(__dirname, "../index.html"));
 });
 
 // ===============================
-// STATE
+// VERTEX AI FUNCTION LAYER
 // ===============================
-const agents = new Map();
-const tasks = [];
+async function vertexAnalyze(prompt) {
+    if (!VERTEX_API_KEY) return null;
 
-const TASK_POOL = [
-    { name: "Hospital Emergency", x: 120, y: 150 },
-    { name: "Flood Zone", x: 420, y: 300 },
-    { name: "Building Fire", x: 700, y: 200 },
-    { name: "Traffic Accident", x: 600, y: 420 },
-    { name: "Gas Leak", x: 250, y: 360 }
-];
+    try {
+        const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${VERTEX_MODEL}:generateContent?key=${VERTEX_API_KEY}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [
+                        {
+                            parts: [{ text: prompt }]
+                        }
+                    ]
+                })
+            }
+        );
+
+        const data = await res.json();
+
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+
+    } catch (err) {
+        Logger.error("Vertex AI Error", err);
+        return null;
+    }
+}
 
 // ===============================
-// BROADCAST
+// EVENT STRUCTURE
 // ===============================
-function broadcast(payload) {
-    const data = JSON.stringify(payload);
+class HashgraphEvent {
+    constructor({ creator, type, payload }) {
+        this.id = crypto.randomUUID();
+        this.creator = creator;
+        this.type = type;
+        this.payload = payload;
 
-    wss.clients.forEach((client) => {
-        if (client.readyState === 1) {
-            client.send(data);
+        this.timestamp = Date.now();
+        this.signature = crypto.randomBytes(12).toString("hex");
+
+        this.consensusTimestamp = null;
+    }
+}
+
+// ===============================
+// CONSENSUS ENGINE
+// ===============================
+class ConsensusEngine {
+    constructor() {
+        this.events = new Map();
+        this.peers = new Map();
+
+        this.state = {
+            tasks: new Map(),
+            agents: new Map(),
+        };
+    }
+
+    // ===============================
+    // PEER MANAGEMENT
+    // ===============================
+    registerPeer(ws, agentId) {
+        const peer = {
+            ws,
+            agentId,
+            events: new Set(),
+            lastSeen: Date.now()
+        };
+
+        this.peers.set(agentId, peer);
+
+        this.state.agents.set(agentId, {
+            id: agentId,
+            x: 0,
+            y: 0,
+            status: "idle"
+        });
+
+        Logger.info("Agent joined", { agentId });
+
+        return peer;
+    }
+
+    removePeer(agentId) {
+        this.peers.delete(agentId);
+        this.state.agents.delete(agentId);
+
+        Logger.warn("Agent removed", { agentId });
+    }
+
+    // ===============================
+    // EVENT CREATION
+    // ===============================
+    async createEvent(creator, type, payload) {
+
+        const event = new HashgraphEvent({
+            creator,
+            type,
+            payload
+        });
+
+        this.events.set(event.id, event);
+
+        // ===============================
+        // VERTEX AI INTELLIGENCE LAYER
+        // ===============================
+        if (type === EVENT_TYPES.TASK_ANNOUNCE) {
+
+            const ai = await vertexAnalyze(
+                `Rate emergency priority (low, medium, high) and explain briefly:
+                ${JSON.stringify(payload)}`
+            );
+
+            payload.aiInsight = ai || "no-ai-response";
+
+            this.state.tasks.set(payload.id, {
+                ...payload,
+                claimedBy: null,
+                completed: false
+            });
         }
-    });
-}
 
-// ===============================
-// TASK CREATION
-// ===============================
-function createTask() {
-    const base = TASK_POOL[Math.floor(Math.random() * TASK_POOL.length)];
+        if (type === EVENT_TYPES.TASK_CLAIM) {
+            const task = this.state.tasks.get(payload.taskId);
+            if (task && !task.claimedBy) {
+                task.claimedBy = payload.agentId;
+            }
+        }
 
-    const task = {
-        id: "T" + Date.now(),
-        location: base,
-        claimedBy: null,
-        completed: false,
-        createdAt: Date.now()
-    };
+        if (type === EVENT_TYPES.TASK_COMPLETE) {
+            const task = this.state.tasks.get(payload.taskId);
+            if (task && task.claimedBy === payload.agentId) {
+                task.completed = true;
+            }
+        }
 
-    tasks.push(task);
+        if (type === EVENT_TYPES.AGENT_MOVE) {
+            const agent = this.state.agents.get(payload.agentId);
+            if (agent) {
+                agent.x = payload.x;
+                agent.y = payload.y;
+            }
+        }
 
-    broadcast({ type: "TASK_CREATED", task });
+        if (type === EVENT_TYPES.AGENT_DOWN) {
+            this.state.agents.delete(payload.agentId);
+        }
 
-    console.log(`📍 Task injected into swarm: ${task.id}`);
-}
+        this.gossip(event);
+        this.broadcast(event);
 
-// ===============================
-// CLEANUP
-// ===============================
-function cleanupTasks() {
-    for (const task of tasks) {
-        if (task.claimedBy && !agents.has(task.claimedBy)) {
-            task.claimedBy = null;
+        return event;
+    }
 
-            // FIX: ensure frontend compatibility
-            broadcast({ type: "TASK_RELEASED", taskId: task.id });
+    // ===============================
+    // GOSSIP SYSTEM
+    // ===============================
+    gossip(event) {
+        const packet = JSON.stringify({
+            type: EVENT_TYPES.GOSSIP_EVENT,
+            event
+        });
+
+        for (const peer of this.peers.values()) {
+            if (peer.ws.readyState === 1) {
+                peer.ws.send(packet);
+            }
+        }
+    }
+
+    // ===============================
+    // STATE BROADCAST
+    // ===============================
+    broadcast(event) {
+        const payload = JSON.stringify({
+            type: "STATE_UPDATE",
+            state: {
+                tasks: Array.from(this.state.tasks.values()),
+                agents: Array.from(this.state.agents.values())
+            },
+            meta: {
+                eventId: event.id,
+                type: event.type,
+                timestamp: event.timestamp
+            }
+        });
+
+        for (const peer of this.peers.values()) {
+            if (peer.ws.readyState === 1) {
+                peer.ws.send(payload);
+            }
         }
     }
 }
 
 // ===============================
-// WEBSOCKET
+// ENGINE INSTANCE
+// ===============================
+const consensus = new ConsensusEngine();
+
+// ===============================
+// WEBSOCKET LAYER
 // ===============================
 wss.on("connection", (ws) => {
+
     let agentId = null;
 
-    console.log("🟢 New WebSocket agent connected");
-
-    ws.on("message", (raw) => {
+    ws.on("message", async (raw) => {
 
         let msg;
         try {
@@ -104,123 +255,34 @@ wss.on("connection", (ws) => {
             return;
         }
 
-        // ===========================
-        // REGISTER
-        // ===========================
         if (msg.type === "REGISTER") {
-
             agentId = msg.id;
-
-            agents.set(agentId, {
-                id: agentId,
-                x: 0,
-                y: 0,
-                status: "idle"
-            });
-
-            ws.send(JSON.stringify({
-                type: "INIT",
-                agents: Array.from(agents.values()),
-                tasks: JSON.parse(JSON.stringify(tasks)) // FIX: safe clone
-            }));
-
-            broadcast({
-                type: "AGENT_JOINED",
-                agent: agents.get(agentId)
-            });
+            consensus.registerPeer(ws, agentId);
+            return;
         }
 
-        // ===========================
-        // MOVE (FIXED VALIDATION)
-        // ===========================
-        if (msg.type === "MOVE") {
-
-            const agent = agents.get(agentId);
-            if (!agent) return;
-
-            if (typeof msg.x !== "number" || typeof msg.y !== "number") return;
-
-            agent.x = msg.x;
-            agent.y = msg.y;
-
-            broadcast({
-                type: "AGENT_MOVED",
-                id: agentId,
-                x: msg.x,
-                y: msg.y
-            });
-        }
-
-        // ===========================
-        // CLAIM TASK (FIXED SAFETY)
-        // ===========================
-        if (msg.type === "CLAIM_TASK") {
-
-            const task = tasks.find(t => t.id === msg.taskId);
-
-            if (task && !task.claimedBy && agentId) {
-                task.claimedBy = agentId;
-
-                broadcast({
-                    type: "TASK_CLAIMED",
-                    taskId: task.id,
-                    agentId
-                });
-            }
-        }
-
-        // ===========================
-        // COMPLETE TASK (FIXED SAFETY)
-        // ===========================
-        if (msg.type === "COMPLETE_TASK") {
-
-            const task = tasks.find(t => t.id === msg.taskId);
-
-            if (task && !task.completed && task.claimedBy === agentId) {
-                task.completed = true;
-
-                broadcast({
-                    type: "TASK_COMPLETED",
-                    taskId: task.id,
-                    agentId
-                });
-            }
+        if (msg.type === "EVENT") {
+            await consensus.createEvent(
+                agentId,
+                msg.payload.type,
+                msg.payload.data
+            );
         }
     });
 
-    // ===============================
-    // DISCONNECT
-    // ===============================
     ws.on("close", () => {
-
-        if (!agentId) return;
-
-        agents.delete(agentId);
-
-        broadcast({
-            type: "AGENT_LEFT",
-            id: agentId
-        });
-
-        cleanupTasks();
-
-        console.log(`🔴 Agent disconnected: ${agentId}`);
+        if (agentId) consensus.removePeer(agentId);
     });
+
+    ws.send(JSON.stringify({ type: "READY" }));
 });
 
 // ===============================
 // START SERVER
 // ===============================
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-
-    console.log("⚡ MeshRescue WebSocket Swarm Engine Initializing...");
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-
-    setInterval(() => {
-        if (Math.random() < 0.7) {
-            createTask();
-        }
-    }, 6000);
+server.listen(CONFIG.PORT, () => {
+    Logger.info("MeshRescue Vertex AI Node running", {
+        url: `http://localhost:${CONFIG.PORT}`,
+        mode: "AI + Consensus Hybrid System"
+    });
 });

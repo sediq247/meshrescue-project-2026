@@ -1,170 +1,120 @@
-# MeshRescue Swarm System — P2P Coordination System
+# MeshRescue System
 
-> A decentralized peer-to-peer swarm intelligence system for coordinating autonomous agents in emergency response environments without centralized control.
+**MeshRescue** is a Vertex-aligned swarm intelligence simulation system that models decentralized coordination using a DAG-inspired event structure, real-time agent behavior, and consensus-style task execution.
 
----
-
-# ⚠️ Problem Statement
-
-Modern multi-agent systems (robot fleets, drones, IoT devices, and AI agents) are typically built on centralized architectures. While this approach is simple, it introduces serious limitations:
-
-## ❌ Key Problems
-
-- A central server assigns and controls all tasks
-- System failure occurs if the central node goes down
-- Cloud dependency introduces latency and fragility
-- Agents cannot independently coordinate in real time
-- Poor scalability in distributed or disaster environments
-- No resilience under network disruptions or partial failures
-
-In real-world emergency scenarios like floods, fires, or large-scale accidents, these weaknesses become critical failure points.
+It simulates how autonomous agents communicate, claim tasks, recover from failures, and reach coordinated outcomes through a lightweight Vertex-inspired protocol layer.
 
 ---
 
-# ⚡ MeshRescue Solution
+## 🚀 What MeshRescue Does
 
-MeshRescue replaces centralized orchestration with a **fully decentralized swarm model**.
+MeshRescue is not just a visualization — it is a **distributed swarm simulation engine**.
 
-Instead of a single controller:
-- Every agent is independent
-- Decisions are made locally
-- Communication happens through a mesh protocol
-- Coordination emerges from interaction, not instruction
+It demonstrates:
 
-## 🧠 Core Idea
+- 🧠 Autonomous agent decision-making (task selection + movement logic)
+- 🌐 Peer-to-peer style communication via event propagation
+- 📡 Vertex-inspired DAG event linking (parent/child event structure simulation)
+- ⚡ Real-time task claiming and completion
+- 🧩 Consensus-style state reconciliation between agents and server
+- 💥 Byzantine fault simulation (agent failure injection)
+- 📊 Live visualization of swarm state and network behavior
+- 🔁 Continuous sync between frontend protocol layer and backend state
 
-> “Remove the master controller. Let intelligence emerge from the swarm.”
+In short:
 
-MeshRescue demonstrates how autonomous systems can self-organize in real time without relying on cloud-based coordination.
-
----
-
-# 🏗️ How MeshRescue is Built
-
-MeshRescue is designed as a 4-layer system:
+> MeshRescue simulates how a decentralized intelligent system behaves under real-world conditions like delay, failure, and partial agreement.
 
 ---
 
-## 🌍 1. Environment Layer — `server.js`
-
-The server acts only as a **neutral event generator**:
-
-- Generates emergency tasks (fire, flood, hospital, accident, etc.)
-- Broadcasts events to all connected agents
-- Maintains minimal shared state
-- Does NOT assign tasks or make decisions
-
-👉 It behaves like a real-world environment simulator, not a controller.
+## 🧬 System Architecture
+Frontend Layer ├── main.js (Visualization Engine) ├── agents.js (Swarm Intelligence Layer) ├── protocol.js (Vertex Swarm Protocol) └── style.css (UI + Dashboard)
+Shared Layer ├── config.js (Environment configuration) ├── events.js (Event schema definitions) └── logger.js (Logging system)
+Backend Layer ├── server.js (WebSocket + swarm coordinator) ├── vertex.js (Vertex abstraction layer) └── consensus engine (task resolution logic)
 
 ---
 
-## 📡 2. Communication Layer — `protocol.js`
+## ⚙️ Core Features
 
-This layer simulates a **peer-to-peer mesh network**:
-
-- Agent discovery (who is in the swarm)
-- Message broadcasting across all nodes
-- Direct messaging support
-- Heartbeat system for liveness detection
-- Failure detection and recovery propagation
-
-👉 This is the “coordination fabric” of the swarm.
+### 🤖 Swarm Intelligence
+Each agent:
+- Moves in a simulated 2D space
+- Evaluates nearby tasks
+- Selects optimal task based on distance + randomness
+- Claims and completes tasks independently
 
 ---
 
-## 🤖 3. Swarm Intelligence Layer — `agents.js`
-
-Each agent operates independently with local intelligence:
-
-- Evaluates available tasks
-- Calculates proximity and priority
-- Competes with other agents for task ownership
-- Moves autonomously toward targets
-- Completes tasks without external instructions
-
-👉 There is no central decision-making system.
+### 🌐 Vertex Protocol Simulation
+MeshRescue simulates a Vertex-like system where:
+- Events are created with parent references (DAG-style)
+- Events propagate across peers
+- State is eventually reconciled across the swarm
 
 ---
 
-## 🎨 4. Visualization Layer — `main.js`
+### 📡 Network Simulation
+The system includes realistic network behavior:
 
-The frontend provides real-time visualization:
-
-- Live agent movement on a canvas
-- Task generation and status tracking
-- Swarm behavior representation
-- System metrics and UI interaction
-
-👉 This layer is purely visual and does not influence logic.
+- Latency simulation
+- Packet loss simulation
+- Heartbeat intervals
+- Gossip propagation delays
 
 ---
 
-# 🔄 How the System Works (Runtime Flow)
-
-1. The server generates emergency tasks dynamically
-2. Tasks are broadcast to all agents through the protocol layer
-3. Each agent independently evaluates tasks
-4. Multiple agents may attempt to claim the same task
-5. The first valid claim wins ownership
-6. The agent moves to the location and completes the task
-7. If an agent fails or disconnects:
-   - The system detects failure via heartbeat loss
-   - Tasks are released back into the swarm
-   - Other agents re-claim automatically
-8. The swarm continues operating without interruption
+### 💥 Byzantine Fault Injection
+To simulate real-world distributed systems:
+- Random agent failure
+- Node removal mid-task
+- Recovery via consensus reconciliation
 
 ---
 
-# 🧪 Proof of Peer-to-Peer Coordination
-
-MeshRescue demonstrates true P2P swarm behavior:
-
-## ✔ No Central Controller
-The server does NOT assign tasks or control agents.
-
-## ✔ Distributed Intelligence
-Each agent makes independent decisions based on local data.
-
-## ✔ Emergent Coordination
-Task ownership emerges naturally through competition.
-
-## ✔ Mesh Communication
-Agents communicate through a distributed message propagation system.
-
-## ✔ Fault Tolerance
-The system self-recovers from agent failure without external intervention.
+### 🧩 Consensus Engine
+The system resolves:
+- Task assignment conflicts
+- Duplicate claims
+- Completed task validation
+- Agent-state synchronization
 
 ---
 
-# 🔥 Key Features
+## 🎮 UI Features
 
-- Decentralized swarm intelligence
-- Real-time task competition
-- Peer-to-peer mesh communication simulation
-- Self-healing failure recovery system
-- Live swarm visualization dashboard
-- Emergent coordination behavior
-
----
-
-## 🏗️ Architecture
-
-Frontend (UI)
-   ↓
-main.js
-   ↓
-agents.js
-   ↓
-protocol.js
-   ↓
-server.js
+- Real-time swarm map visualization
+- Live agent tracking
+- Task execution visualization
+- Event stream panel (Vertex event log)
+- System metrics dashboard
+- Network status indicators
+- Failure injection controls
 
 ---
 
-## 🧰 Tech Stack
+## 🔧 Tech Stack
 
-- Node.js
-- WebSockets (ws)
-- Vanilla JavaScript
-- HTML5 Canvas
-- CSS3
+- HTML5 Canvas (visualization engine)
+- Vanilla JavaScript (no frameworks)
+- WebSockets (real-time sync)
+- Node.js backend
+- Vertex-inspired event model (custom implementation)
+
+---
+
+## 📦 Installation
+
+```bash
+git clone https://github.com/your-username/meshrescue.git
+cd meshrescue
+npm install
+
+
+**Key Idea Behind MeshRescue**
+MeshRescue is designed to demonstrate:
+How decentralized systems can coordinate intelligence without a single point of control.
+It combines:
+Swarm robotics concepts
+Distributed systems theory
+DAG-based event propagation
+Real-time simulation rendering

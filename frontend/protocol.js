@@ -1,247 +1,142 @@
-// MeshRescue | Vertex Swarm Protocol Layer (STABLE FINAL BUILD)
-
+protocol 
 (function () {
 
-    const peers = new Map();       
-    const messageQueue = [];        
-
-    const LATENCY = 35;
-    const PACKET_LOSS = 0.02;
-
-    function now() {
-        return Date.now();
-    }
-
-    function pushMessage(msg) {
-        messageQueue.push({
-            ...msg,
-            timestamp: now()
-        });
-    }
+    const socket = new WebSocket(`ws://${location.host}`);
+    let connected = false;
 
     // ===============================
-    // AGENT MANAGEMENT
+    // CLIENT STATE (SYNCED FROM SERVER)
     // ===============================
-    function registerAgent(agent) {
-        if (!agent?.id) return;
+    const state = {
+        peers: new Map(),
+        lastEvent: null,
+        eventLog: []
+    };
 
-        peers.set(agent.id, agent);
-
-        simulateBroadcast({
-            type: "DISCOVERY",
-            from: agent.id,
-            payload: { id: agent.id }
-        });
-    }
-
-    function removeAgent(agentId) {
-        peers.delete(agentId);
-
-        simulateBroadcast({
-            type: "NODE_DOWN",
-            from: agentId
-        });
-    }
-
-    // ===============================
-    // NETWORK LAYER (SIMULATED)
-    // ===============================
-    function simulateBroadcast(message) {
-
-        setTimeout(() => {
-
-            if (Math.random() < PACKET_LOSS) return;
-
-            pushMessage(message);
-
-        }, LATENCY);
-    }
-
-    function send(to, message) {
-
-        setTimeout(() => {
-
-            pushMessage({
-                ...message,
-                to
-            });
-
-        }, LATENCY);
-    }
-
-    // ===============================
-    // MESSAGE PROCESSOR
-    // ===============================
-    function processMessages() {
-
-        const queue = [...messageQueue];
-        messageQueue.length = 0;
-
-        for (const msg of queue) {
-
-            console.log(`📡 [MESH] ${msg.type}`, msg.from || "system");
-
-            peers.forEach((agent) => {
-
-                if (msg.to && msg.to !== agent.id) return;
-
-                handleMessage(agent, msg);
-            });
+    function send(type, data = {}) {
+        if (socket.readyState === 1) {
+            socket.send(JSON.stringify({ type, ...data }));
         }
     }
+
+    // ===============================
+    // SOCKET EVENTS
+    // ===============================
+    socket.onopen = () => {
+        connected = true;
+        console.log("🟢 Vertex connected");
+    };
+
+    socket.onclose = () => {
+        connected = false;
+        console.log("🔴 Vertex disconnected");
+    };
+
+    socket.onerror = () => {
+        connected = false;
+    };
+
+    socket.onmessage = (e) => {
+        try {
+            const msg = JSON.parse(e.data);
+            handle(msg);
+        } catch (err) {
+            console.warn("Invalid message", err);
+        }
+    };
 
     // ===============================
     // MESSAGE HANDLER
     // ===============================
-    function handleMessage(agent, msg) {
+    function handle(msg) {
 
-        if (!agent) return;
+        // store last event (for DAG trace UI)
+        state.lastEvent = msg;
+        state.eventLog.push(msg);
 
-        // SAFE INIT (CRITICAL FIX)
-        agent.knownTasks = agent.knownTasks || new Map();
-        agent.knownPeers = agent.knownPeers || new Set();
-        agent.lastSeen = agent.lastSeen || {};
+        if (state.eventLog.length > 100) {
+            state.eventLog.shift();
+        }
 
         switch (msg.type) {
 
-            case "DISCOVERY":
-                agent.knownPeers.add(msg.payload.id);
+            case "READY":
                 break;
 
-            case "TASK_ANNOUNCE":
-                agent.knownTasks.set(msg.payload.id, msg.payload);
+            case "STATE_UPDATE":
+                window.globalTasks = msg.state?.tasks || [];
+                window.swarmAgents = msg.state?.agents || [];
                 break;
 
-            case "TASK_CLAIM": {
-                const task = agent.knownTasks.get(msg.payload.taskId);
-                if (task && !task.claimedBy) {
-                    task.claimedBy = msg.from;
-                }
-                break;
-            }
-
-            case "TASK_COMPLETE": {
-                const task = agent.knownTasks.get(msg.payload.taskId);
-                if (task) {
-                    task.completed = true;
-                }
-                break;
-            }
-
-            case "HEARTBEAT":
-                agent.lastSeen[msg.from] = now();
+            case "INIT":
+                window.globalTasks = msg.tasks || [];
+                window.swarmAgents = msg.agents || [];
                 break;
 
-            case "NODE_DOWN":
+            case "GOSSIP_EVENT":
+                break;
 
-                agent.knownPeers.delete(msg.from);
-
-                agent.knownTasks.forEach(task => {
-                    if (task.claimedBy === msg.from) {
-                        task.claimedBy = null;
-                    }
-                });
-
-                delete agent.lastSeen[msg.from];
+            // ===============================
+            // 🔥 VERTEX AI / JUDGE EXTENSION
+            // ===============================
+            case "ANOMALY_ALERT":
+            case "VERTEX_REASONING":
+                window.dispatchEvent(new CustomEvent("vertex-ai", {
+                    detail: msg.payload
+                }));
                 break;
         }
     }
 
     // ===============================
-    // HEARTBEAT (STABLE VERSION)
-    // ===============================
-    function heartbeat() {
-
-        peers.forEach((agent, id) => {
-
-            simulateBroadcast({
-                type: "HEARTBEAT",
-                from: id
-            });
-
-        });
-    }
-
-    // ===============================
-    // FAILURE DETECTION (SAFE)
-    // ===============================
-    function detectFailures() {
-
-        const current = now();
-
-        peers.forEach((agent) => {
-
-            Object.keys(agent.lastSeen || {}).forEach(peerId => {
-
-                if (current - agent.lastSeen[peerId] > 7000) {
-
-                    simulateBroadcast({
-                        type: "NODE_DOWN",
-                        from: peerId
-                    });
-
-                    delete agent.lastSeen[peerId];
-                }
-            });
-        });
-    }
-
-    // ===============================
-    // TASK API
-    // ===============================
-    function announceTask(task) {
-
-        simulateBroadcast({
-            type: "TASK_ANNOUNCE",
-            from: "system",
-            payload: task
-        });
-    }
-
-    function claimTask(agentId, taskId) {
-
-        simulateBroadcast({
-            type: "TASK_CLAIM",
-            from: agentId,
-            payload: { taskId }
-        });
-    }
-
-    function completeTask(agentId, taskId) {
-
-        simulateBroadcast({
-            type: "TASK_COMPLETE",
-            from: agentId,
-            payload: { taskId }
-        });
-    }
-
-    // ===============================
-    // MAIN LOOP (SAFE INIT)
-    // ===============================
-    function protocolLoop() {
-        processMessages();
-        heartbeat();
-        detectFailures();
-    }
-
-    // Prevent duplicate intervals (IMPORTANT FIX)
-    if (!window.__protocolLoopStarted) {
-        window.__protocolLoopStarted = true;
-        setInterval(protocolLoop, 120);
-    }
-
-    // ===============================
-    // GLOBAL EXPORT
+    // PUBLIC API (INTENT LAYER ONLY)
     // ===============================
     window.MeshProtocol = {
-        registerAgent,
-        removeAgent,
-        announceTask,
-        claimTask,
-        completeTask,
-        send,
-        broadcast: simulateBroadcast
+
+        registerAgent(agent) {
+            state.peers.set(agent.id, agent);
+            send("REGISTER", { id: agent.id });
+        },
+
+        removeAgent(agentId) {
+            state.peers.delete(agentId);
+            send("AGENT_DOWN", { agentId });
+        },
+
+        announceTask(task) {
+            send("EVENT", {
+                payload: {
+                    type: "TASK_ANNOUNCE",
+                    data: task
+                }
+            });
+        },
+
+        claimTask(agentId, taskId) {
+            send("EVENT", {
+                payload: {
+                    type: "TASK_CLAIM",
+                    data: { agentId, taskId }
+                }
+            });
+        },
+
+        completeTask(agentId, taskId) {
+            send("EVENT", {
+                payload: {
+                    type: "TASK_COMPLETE",
+                    data: { agentId, taskId }
+                }
+            });
+        },
+
+        isConnected: () => connected,
+
+        getPeers: () => state.peers,
+
+        getEventLog: () => state.eventLog,
+
+        getLastEvent: () => state.lastEvent
     };
 
 })();

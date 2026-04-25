@@ -1,54 +1,93 @@
-// MeshRescue | Enhanced Visualization Layer (CONTROLLED FINAL BUILD)
+// ===============================================
+// MeshRescue | Vertex Swarm Visualization Engine 
+// ===============================================
 
 document.addEventListener("DOMContentLoaded", () => {
 
     const canvas = document.getElementById("swarmCanvas");
     const ctx = canvas.getContext("2d");
 
-    const agentCountEl = document.getElementById("agentCount");
-    const networkStatusEl = document.getElementById("networkStatus");
-    const swarmStateEl = document.getElementById("swarmState");
-    const zoneInfoEl = document.getElementById("zoneInfo");
+    const el = {
+        bootStatus: document.getElementById("bootStatus"),
 
-    const activeAgentsEl = document.getElementById("activeAgents");
-    const tasksAssignedEl = document.getElementById("tasksAssigned");
-    const tasksCompletedEl = document.getElementById("tasksCompleted");
+        agentCount: document.getElementById("agentCount"),
+        networkStatus: document.getElementById("networkStatus"),
+        swarmState: document.getElementById("swarmState"),
 
-    const logsEl = document.getElementById("logs");
+        vertexStatus: document.getElementById("vertexStatus"),
+        syncStatus: document.getElementById("syncStatus"),
+        latencyStatus: document.getElementById("latencyStatus"),
+        roundStatus: document.getElementById("roundStatus"),
 
-    const startBtn = document.getElementById("startBtn");
-    const pauseBtn = document.getElementById("pauseBtn");
-    const resetBtn = document.getElementById("resetBtn");
-    const killAgentBtn = document.getElementById("killAgentBtn");
+        zoneInfo: document.getElementById("zoneInfo"),
+
+        activeAgents: document.getElementById("activeAgents"),
+        tasksAssigned: document.getElementById("tasksAssigned"),
+        tasksCompleted: document.getElementById("tasksCompleted"),
+        failures: document.getElementById("failures"),
+
+        logs: document.getElementById("logs"),
+        eventStream: document.getElementById("eventStream"),
+    };
 
     // ===============================
-    // LIVE STATE ACCESS
+    // STATE
     // ===============================
-    const getAgents = () => window.swarmAgents || [];
-    const getTasks = () => window.globalTasks || [];
-
     let zoom = 1;
     let offsetX = 0;
     let offsetY = 0;
-
     let running = false;
     let autoFollow = true;
 
-    // ===============================
-    // LOG SYSTEM
-    // ===============================
-    function log(msg) {
-        const p = document.createElement("p");
-        p.textContent = `🛰️ [${new Date().toLocaleTimeString()}] ${msg}`;
-        logsEl.appendChild(p);
-        logsEl.scrollTop = logsEl.scrollHeight;
+    let vertexReady = false;
+    let syncProgress = 0;
+    let round = 0;
+    let failures = 0;
+
+    const getAgents = () => window.swarmAgents || [];
+    const getTasks = () => window.globalTasks || [];
+
+    function updateBoot() {
+        const steps = [
+            "Loading modules...",
+            "Initializing DAG...",
+            "Syncing swarm state...",
+            "Connecting Vertex protocol...",
+            "Finalizing consensus engine..."
+        ];
+
+        let i = 0;
+
+        const interval = setInterval(() => {
+            if (el.bootStatus) el.bootStatus.textContent = steps[i];
+
+            i++;
+
+            if (i >= steps.length) {
+                clearInterval(interval);
+
+                setTimeout(() => {
+                    vertexReady = true;
+                    if (el.vertexStatus) {
+                        el.vertexStatus.innerHTML = `<span class="dot online"></span> Active`;
+                    }
+                }, 400);
+            }
+        }, 400);
     }
 
     // ===============================
-    // AUTO FIT CAMERA
+    // LOGGING
     // ===============================
-    function autoFit() {
+    function log(msg) {
+        if (!el.logs) return;
+        const p = document.createElement("p");
+        p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        el.logs.appendChild(p);
+        el.logs.scrollTop = el.logs.scrollHeight;
+    }
 
+    function autoFit() {
         const agents = getAgents();
         const tasks = getTasks();
 
@@ -62,36 +101,73 @@ document.addEventListener("DOMContentLoaded", () => {
         let minX = Infinity, minY = Infinity;
         let maxX = -Infinity, maxY = -Infinity;
 
-        points.forEach(p => {
+        for (const p of points) {
             minX = Math.min(minX, p.x);
             minY = Math.min(minY, p.y);
             maxX = Math.max(maxX, p.x);
             maxY = Math.max(maxY, p.y);
-        });
+        }
 
         const padding = 150;
-
         const width = (maxX - minX) + padding;
         const height = (maxY - minY) + padding;
 
-        const scaleX = canvas.width / width;
-        const scaleY = canvas.height / height;
-
-        zoom = Math.min(scaleX, scaleY, 1.8);
+        zoom = Math.min(canvas.width / width, canvas.height / height, 1.6);
 
         offsetX = -(minX - padding / 2) * zoom;
         offsetY = -(minY - padding / 2) * zoom;
     }
 
+    function updateCamera() {
+        if (!autoFollow) return;
+
+        const agents = getAgents();
+        const tasks = getTasks();
+
+        const all = [
+            ...tasks.map(t => t?.location).filter(Boolean),
+            ...agents
+        ];
+
+        if (!all.length) return;
+
+        let cx = 0, cy = 0;
+
+        for (const p of all) {
+            cx += p.x;
+            cy += p.y;
+        }
+
+        cx /= all.length;
+        cy /= all.length;
+
+        offsetX = canvas.width / 2 - cx * zoom;
+        offsetY = canvas.height / 2 - cy * zoom;
+    }
+
     // ===============================
-    // GRID
+    // DRAW
     // ===============================
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(zoom, zoom);
+
+        drawGrid();
+        drawTasks();
+        drawConnections();
+        drawAgents();
+
+        ctx.restore();
+    }
+
     function drawGrid() {
-
-        const size = 60;
-
         ctx.strokeStyle = "rgba(255,255,255,0.04)";
         ctx.lineWidth = 1;
+
+        const size = 60;
 
         for (let x = -1000; x < canvas.width + 1000; x += size) {
             ctx.beginPath();
@@ -108,16 +184,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // ===============================
-    // TASKS
-    // ===============================
     function drawTasks() {
-
         const tasks = getTasks();
 
-        tasks.forEach(task => {
-
-            if (!task?.location) return;
+        for (const task of tasks) {
+            if (!task?.location) continue;
 
             const loc = task.location;
 
@@ -125,144 +196,90 @@ document.addEventListener("DOMContentLoaded", () => {
             if (task.completed) color = "#64748b";
             else if (task.claimedBy) color = "#f59e0b";
 
-            if (!task.claimedBy && !task.completed) {
-                const pulse = 8 + Math.sin(Date.now() * 0.004) * 4;
-
-                ctx.beginPath();
-                ctx.arc(loc.x, loc.y, pulse, 0, Math.PI * 2);
-                ctx.fillStyle = "rgba(239,68,68,0.15)";
-                ctx.fill();
-            }
-
             ctx.beginPath();
             ctx.arc(loc.x, loc.y, 6, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
 
-            ctx.fillStyle = "#e2e8f0";
+            ctx.fillStyle = "#fff";
             ctx.font = "9px Arial";
-            ctx.fillText(loc.name, loc.x + 8, loc.y - 6);
-
-            if (task.claimedBy) {
-                ctx.fillStyle = "#f59e0b";
-                ctx.fillText(task.claimedBy, loc.x + 8, loc.y + 10);
-            }
-        });
+            ctx.fillText(loc.name || "task", loc.x + 8, loc.y - 6);
+        }
     }
 
-    // ===============================
-    // AGENTS
-    // ===============================
     function drawAgents() {
-
         const agents = getAgents();
 
-        agents.forEach(agent => {
-
-            if (!agent || agent.status === "dead") return;
+        for (const agent of agents) {
+            if (!agent) continue;
 
             ctx.beginPath();
             ctx.arc(agent.x, agent.y, 6, 0, Math.PI * 2);
-
             ctx.fillStyle = agent.status === "busy" ? "#f59e0b" : "#22c55e";
             ctx.fill();
 
-            ctx.fillStyle = "#94a3b8";
+            ctx.fillStyle = "#ccc";
             ctx.font = "8px Arial";
             ctx.fillText(agent.id, agent.x + 6, agent.y - 6);
-        });
+        }
     }
 
-    // ===============================
-    // CONNECTION LINES
-    // ===============================
     function drawConnections() {
-
         const agents = getAgents();
 
-        agents.forEach(agent => {
-
-            if (!agent || agent.status !== "busy" || !agent.target) return;
+        for (const agent of agents) {
+            if (!agent?.target) continue;
 
             ctx.beginPath();
             ctx.moveTo(agent.x, agent.y);
             ctx.lineTo(agent.target.x, agent.target.y);
-
-            ctx.strokeStyle = "rgba(245,158,11,0.4)";
+            ctx.strokeStyle = "rgba(245,158,11,0.3)";
             ctx.stroke();
-        });
+        }
     }
 
-    // ===============================
-    // CAMERA
-    // ===============================
-    function updateCamera() {
-
-        if (!autoFollow) return;
-
-        const agents = getAgents();
-        const tasks = getTasks();
-
-        const all = [];
-
-        tasks.forEach(t => t?.location && all.push(t.location));
-        agents.forEach(a => all.push(a));
-
-        if (!all.length) return;
-
-        let sx = 0, sy = 0;
-
-        all.forEach(p => {
-            sx += p.x;
-            sy += p.y;
-        });
-
-        const cx = sx / all.length;
-        const cy = sy / all.length;
-
-        offsetX = canvas.width / 2 - cx * zoom;
-        offsetY = canvas.height / 2 - cy * zoom;
-    }
-
-    // ===============================
-    // DRAW
-    // ===============================
-    function draw() {
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        ctx.save();
-        ctx.translate(offsetX, offsetY);
-        ctx.scale(zoom, zoom);
-
-        drawGrid();
-        drawTasks();
-        drawConnections();
-        drawAgents();
-
-        ctx.restore();
-    }
-
-    // ===============================
-    // UI UPDATE
-    // ===============================
     function updateUI() {
-
         const agents = getAgents();
         const tasks = getTasks();
 
-        agentCountEl.textContent = agents.length;
-        activeAgentsEl.textContent = agents.filter(a => a?.status !== "dead").length;
+        el.agentCount.textContent = agents.length;
+        el.activeAgents.textContent = agents.filter(a => a?.status !== "dead").length;
+        el.tasksAssigned.textContent = tasks.length;
+        el.tasksCompleted.textContent = tasks.filter(t => t?.completed).length;
 
-        tasksAssignedEl.textContent = tasks.length;
-        tasksCompletedEl.textContent = tasks.filter(t => t?.completed).length;
+        // Vertex sync simulation
+        if (vertexReady) {
+            syncProgress = Math.min(100, syncProgress + Math.random() * 5);
+        }
+
+        el.syncStatus.textContent = `${Math.floor(syncProgress)}%`;
+
+        // latency simulation
+        const latency = Math.floor(20 + Math.random() * 40);
+        el.latencyStatus.textContent = `${latency}ms`;
+
+        // round simulation
+        if (running && Math.random() < 0.05) round++;
+        el.roundStatus.textContent = round;
+
+        // network
+        const Protocol = window.MeshProtocol;
+
+        if (Protocol?.isConnected?.()) {
+            el.networkStatus.textContent = "Connected";
+            el.networkStatus.style.color = "#22c55e";
+        } else {
+            el.networkStatus.textContent = "Local";
+            el.networkStatus.style.color = "#f59e0b";
+        }
+
+        el.failures.textContent = failures;
     }
 
     // ===============================
-    // MAIN LOOP
+    // LOOP
     // ===============================
     function animate() {
-
         if (!running) return;
 
         updateCamera();
@@ -273,81 +290,69 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // CONTROLS (🔥 FIXED CONNECTION)
+    // CONTROLS (SAFE BINDING)
     // ===============================
+    const startBtn = document.getElementById("startBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const killAgentBtn = document.getElementById("killAgentBtn");
+
     startBtn.onclick = () => {
-
-        if (running) return;
-
         running = true;
-
-        // 🔥 START SWARM ENGINE
         window.SwarmControl?.start();
-
-        swarmStateEl.textContent = "Running";
-        networkStatusEl.textContent = "Online";
-
-        log("🚀 Swarm system activated");
-        log("🧠 Agents deploying into Vertex Grid");
-
+        el.swarmState.textContent = "Running";
+        log("Swarm started");
         animate();
     };
 
     pauseBtn.onclick = () => {
-
         running = false;
-
-        // 🔥 STOP SWARM ENGINE
         window.SwarmControl?.stop();
-
-        swarmStateEl.textContent = "Paused";
-
-        log("⏸️ Swarm paused");
+        el.swarmState.textContent = "Paused";
+        log("Swarm paused");
     };
 
     resetBtn.onclick = () => {
-
         running = false;
-
-        // 🔥 RESET ENGINE
         window.SwarmControl?.reset();
 
         zoom = 1;
         offsetX = 0;
         offsetY = 0;
 
-        swarmStateEl.textContent = "Idle";
-        networkStatusEl.textContent = "Offline";
+        syncProgress = 0;
+        round = 0;
+
+        el.swarmState.textContent = "Idle";
 
         autoFit();
         draw();
 
-        log("🔄 System reset complete");
+        log("System reset");
     };
 
     killAgentBtn.onclick = () => {
+        const agents = getAgents().filter(a => a?.status !== "dead");
+        if (!agents.length) return;
 
-        const agents = getAgents();
-        const alive = agents.filter(a => a?.status !== "dead");
+        const agent = agents[Math.floor(Math.random() * agents.length)];
 
-        if (!alive.length) return;
+        failures++;
+        if (window.MeshProtocol) {
+            window.MeshProtocol.removeAgent(agent.id);
+        }
 
-        const agent = alive[Math.floor(Math.random() * alive.length)];
-        agent.status = "dead";
-
-        log(`☠️ ${agent.id} disabled`);
+        log(`${agent.id} injected failure`);
     };
 
     // ===============================
     // INIT
     // ===============================
-    zoneInfoEl.textContent = "Zones: Vertex Emergency Grid";
+    el.zoneInfo.textContent = "Vertex Swarm Intelligence Field";
 
+    bootSequence();
     autoFit();
     updateUI();
     draw();
-
-    // 🔥 LIVE UI REFRESH
-    setInterval(updateUI, 300);
-
+    setInterval(updateUI, 400);
 });

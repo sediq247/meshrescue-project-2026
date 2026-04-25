@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Meshrescue | Vertex Swarm System</title>
+    <title>MeshRescue | Vertex Swarm System</title>
 
     <link rel="stylesheet" href="frontend/style.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
@@ -11,15 +11,27 @@
 
 <body>
 
+<!-- ================= BOOT SCREEN ================= -->
+<div id="bootScreen">
+    <div class="boot-content">
+        <h1>MeshRescue Swarm</h1>
+        <p>Initializing Vertex DAG Consensus Layer...</p>
+        <div class="loader"></div>
+
+        <small id="bootStatus">Loading modules...</small>
+    </div>
+</div>
+
 <!-- ================= HEADER ================= -->
 <header class="header">
 
     <div class="logo">
-        <h1>Meshrescue System</h1>
+        <h1>MeshRescue System</h1>
         <div class="tagline">Vertex Swarm Coordination System</div>
     </div>
 
     <div class="status-bar">
+
         <div class="status-item">
             <span class="label">Agents</span>
             <span id="agentCount" class="value">0</span>
@@ -34,6 +46,33 @@
             <span class="label">Swarm State</span>
             <span id="swarmState" class="value">Idle</span>
         </div>
+
+        <!-- Vertex Mode -->
+        <div class="status-item">
+            <span class="label">Vertex</span>
+            <span id="vertexStatus" class="value">
+                <span class="dot offline"></span> Booting
+            </span>
+        </div>
+
+        <!-- Sync Progress -->
+        <div class="status-item">
+            <span class="label">Sync</span>
+            <span id="syncStatus" class="value">0%</span>
+        </div>
+
+        <!-- NEW: Latency -->
+        <div class="status-item">
+            <span class="label">Latency</span>
+            <span id="latencyStatus" class="value">--ms</span>
+        </div>
+
+        <!-- NEW: Consensus Round -->
+        <div class="status-item">
+            <span class="label">Round</span>
+            <span id="roundStatus" class="value">0</span>
+        </div>
+
     </div>
 
 </header>
@@ -41,13 +80,13 @@
 <!-- ================= MAIN ================= -->
 <div class="main">
 
-    <!-- ===== MAP SECTION ===== -->
+    <!-- ================= MAP ================= -->
     <section class="map-section">
 
         <div class="map-header">
             <h2>Swarm Operations Map</h2>
             <div class="map-info">
-                Real-time emergency coordination grid
+                Real-time Vertex DAG Emergency Coordination Grid
             </div>
         </div>
 
@@ -56,25 +95,23 @@
         </div>
 
         <div class="map-footer">
-            <span id="zoneInfo">Zones: loading...</span>
+            <span id="zoneInfo">Zones: syncing vertex graph...</span>
         </div>
 
     </section>
 
-    <!-- ===== SIDE PANEL ===== -->
+    <!-- ================= SIDE PANEL ================= -->
     <aside class="side-panel">
 
-        <!-- CONTROLS -->
         <div class="panel">
             <h3>Control Panel</h3>
 
             <button id="startBtn" class="btn primary">Start Swarm</button>
             <button id="pauseBtn" class="btn">Pause Swarm</button>
-            <button id="killAgentBtn" class="btn warning">Disable Random Agent</button>
+            <button id="killAgentBtn" class="btn warning">Inject Failure</button>
             <button id="resetBtn" class="btn danger">Reset System</button>
         </div>
 
-        <!-- METRICS -->
         <div class="panel">
             <h3>Live Metrics</h3>
 
@@ -99,10 +136,14 @@
             </div>
         </div>
 
-        <!-- LOGS -->
         <div class="panel logs-panel">
-            <h3>Swarm Logs</h3>
+            <h3>System Logs</h3>
             <div id="logs"></div>
+        </div>
+
+        <div class="panel event-panel">
+            <h3>Vertex Event Stream</h3>
+            <div id="eventStream"></div>
         </div>
 
     </aside>
@@ -111,13 +152,32 @@
 
 <!-- ================= FOOTER ================= -->
 <footer class="footer">
-    MeshRescue © 2026
+    MeshRescue © 2026 | Vertex Swarm Simulation Engine
 </footer>
 
-<!-- ================= SCRIPTS ================= -->
+<!-- ================= MODULES ================= -->
+<script type="module" src="shared/config.js"></script>
+<script type="module" src="shared/events.js"></script>
+<script type="module" src="shared/logger.js"></script>
+
 <script type="module" src="frontend/protocol.js"></script>
 <script type="module" src="frontend/agents.js"></script>
 <script type="module" src="frontend/main.js"></script>
+
+<!-- Boot UX -->
+<script>
+window.addEventListener("load", () => {
+    setTimeout(() => {
+        const boot = document.getElementById("bootScreen");
+        if (boot) boot.style.opacity = "0";
+
+        setTimeout(() => {
+            if (boot) boot.style.display = "none";
+        }, 500);
+
+    }, 1800);
+});
+</script>
 
 </body>
 </html>

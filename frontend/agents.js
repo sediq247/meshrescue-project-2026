@@ -1,103 +1,21 @@
-// MeshRescue | WebSocket + Swarm Hybrid Intelligence (CONTROLLED FINAL BUILD)
-
 (function () {
 
     if (!window.MeshProtocol) {
-        console.error("Protocol not loaded!");
+        console.error("MeshProtocol not loaded!");
         return;
     }
 
     const Protocol = window.MeshProtocol;
-
-    // ===============================
-    // GLOBAL STATE
-    // ===============================
-    window.swarmAgents = [];
-    window.globalTasks = [];
 
     const agentNames = [
         "Aegis-01", "Vanguard-02", "Sentinel-03", "Orion-04", "Atlas-05",
         "Nova-06", "Echo-07", "Helix-08", "Pulse-09", "Titan-10"
     ];
 
-    // ===============================
-    // WEBSOCKET (AUTO RECONNECT)
-    // ===============================
-    let socket;
-
-    function connectSocket() {
-
-        socket = new WebSocket(
-            location.protocol === "https:"
-                ? "wss://" + location.host
-                : "ws://" + location.host
-        );
-
-        socket.onopen = () => {
-            console.log("🟢 Connected to Swarm Server");
-        };
-
-        socket.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            handleServerMessage(msg);
-        };
-
-        socket.onclose = () => {
-            console.log("🔴 Disconnected... reconnecting");
-            setTimeout(connectSocket, 2000);
-        };
-    }
-
-    function safeSend(data) {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify(data));
-        } else {
-            setTimeout(() => safeSend(data), 100);
-        }
-    }
-
-    connectSocket();
+    window.swarmAgents = [];
 
     // ===============================
-    // SERVER MESSAGE HANDLER
-    // ===============================
-    function handleServerMessage(msg) {
-
-        switch (msg.type) {
-
-            case "INIT":
-                window.globalTasks = msg.tasks || [];
-                break;
-
-            case "TASK_CREATED":
-                window.globalTasks.push(msg.task);
-                Protocol.announceTask(msg.task);
-                break;
-
-            case "TASK_CLAIMED":
-                updateTask(msg.taskId, { claimedBy: msg.agentId });
-                Protocol.claimTask(msg.agentId, msg.taskId);
-                break;
-
-            case "TASK_COMPLETED":
-                updateTask(msg.taskId, { completed: true });
-                Protocol.completeTask(msg.agentId, msg.taskId);
-                break;
-
-            case "TASK_RELEASED":
-                updateTask(msg.taskId, { claimedBy: null });
-                break;
-        }
-    }
-
-    function updateTask(taskId, updates) {
-        const task = window.globalTasks.find(t => t.id === taskId);
-        if (!task) return;
-        Object.assign(task, updates);
-    }
-
-    // ===============================
-    // CREATE AGENTS
+    // AGENT FACTORY
     // ===============================
     function createAgents(count = 10) {
 
@@ -110,75 +28,65 @@
                 x: Math.random() * 900,
                 y: Math.random() * 600,
                 status: "idle",
-                speed: 1.5 + Math.random(),
-
+                speed: 1.2 + Math.random(),
                 target: null,
                 claimedTask: null,
-
-                knownTasks: new Map(),
-                knownPeers: new Set(),
-                lastClaimTime: 0
+                lastAction: 0
             };
 
             window.swarmAgents.push(agent);
-
-            safeSend({
-                type: "REGISTER",
-                id: agent.id
-            });
 
             Protocol.registerAgent(agent);
         }
     }
 
     // ===============================
-    // DECISION ENGINE
+    // DECISION ENGINE (LIGHTWEIGHT INTENT ONLY)
     // ===============================
-    function agentDecision(agent) {
+    function decide(agent) {
 
         if (agent.status !== "idle") return;
 
-        let bestTask = null;
+        const tasks = window.globalTasks || [];
+
+        let best = null;
         let bestScore = Infinity;
 
-        window.globalTasks.forEach(task => {
+        for (const task of tasks) {
 
-            if (!task || task.claimedBy || task.completed) return;
+            if (!task || task.claimedBy || task.completed) continue;
 
             const dx = task.location.x - agent.x;
             const dy = task.location.y - agent.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
 
-            const score = dist + (Math.random() * 5);
+            const dist = dx * dx + dy * dy;
+
+            const score = dist + Math.random() * 10;
 
             if (score < bestScore) {
                 bestScore = score;
-                bestTask = task;
+                best = task;
             }
-        });
+        }
 
-        if (!bestTask) return;
+        if (!best) return;
 
-        const now = Date.now();
-        if (now - agent.lastClaimTime < 250) return;
+        if (Date.now() - agent.lastAction < 300) return;
 
         agent.status = "busy";
-        agent.target = bestTask.location;
-        agent.claimedTask = bestTask;
-        agent.lastClaimTime = now;
+        agent.target = best.location;
+        agent.claimedTask = best;
+        agent.lastAction = Date.now();
 
-        safeSend({
-            type: "CLAIM_TASK",
-            taskId: bestTask.id
-        });
-
-        Protocol.claimTask(agent.id, bestTask.id);
+        Protocol.claimTask(agent.id, best.id);
     }
 
     // ===============================
     // MOVEMENT ENGINE
     // ===============================
-    function moveAgent(agent) {
+    function move(agent) {
+
+        if (agent.status === "dead") return;
 
         if (agent.status === "busy" && agent.target) {
 
@@ -186,15 +94,10 @@
             const dy = agent.target.y - agent.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (dist < 3) {
+            if (dist < 4) {
 
+                // only send intent — server decides final state
                 if (agent.claimedTask) {
-
-                    safeSend({
-                        type: "COMPLETE_TASK",
-                        taskId: agent.claimedTask.id
-                    });
-
                     Protocol.completeTask(agent.id, agent.claimedTask.id);
                 }
 
@@ -205,17 +108,30 @@
             } else {
                 agent.x += (dx / dist) * agent.speed;
                 agent.y += (dy / dist) * agent.speed;
-
-                safeSend({
-                    type: "MOVE",
-                    x: agent.x,
-                    y: agent.y
-                });
             }
 
         } else {
-            agent.x += (Math.random() - 0.5) * 1.2;
-            agent.y += (Math.random() - 0.5) * 1.2;
+            agent.x += (Math.random() - 0.5) * 1.0;
+            agent.y += (Math.random() - 0.5) * 1.0;
+        }
+    }
+
+    function reconcile() {
+
+        const tasks = window.globalTasks || [];
+
+        for (const agent of window.swarmAgents) {
+
+            if (!agent.claimedTask) continue;
+
+            const serverTask = tasks.find(t => t.id === agent.claimedTask.id);
+
+            // server says task is already done or taken
+            if (!serverTask || serverTask.completed || serverTask.claimedBy !== agent.id) {
+                agent.status = "idle";
+                agent.target = null;
+                agent.claimedTask = null;
+            }
         }
     }
 
@@ -230,6 +146,7 @@
             if (!alive.length) return;
 
             const agent = alive[Math.floor(Math.random() * alive.length)];
+
             agent.status = "dead";
 
             Protocol.removeAgent(agent.id);
@@ -237,69 +154,57 @@
     }
 
     // ===============================
-    // SWARM LOOP
+    // LOOP
     // ===============================
-    function swarmLoop() {
+    function loop() {
 
-        window.swarmAgents.forEach(agent => {
-            if (agent.status === "dead") return;
+        for (const agent of window.swarmAgents) {
+            if (agent.status === "dead") continue;
 
-            agentDecision(agent);
-            moveAgent(agent);
-        });
+            decide(agent);
+            move(agent);
+        }
 
+        reconcile();
         randomFailure();
     }
 
     // ===============================
-    // CONTROL SYSTEM (IMPORTANT FIX)
+    // CONTROL
     // ===============================
-    let swarmInterval = null;
+    let interval = null;
     let initialized = false;
 
-    function startSwarmSystem() {
+    function start() {
 
-        if (swarmInterval) return;
+        if (interval) return;
 
         if (!initialized) {
             createAgents(10);
             initialized = true;
-            console.log("🧠 Agents initialized");
+            console.log("🧠 Swarm initialized");
         }
 
-        swarmInterval = setInterval(swarmLoop, 50);
-        console.log("🚀 Swarm Engine Started");
+        interval = setInterval(loop, 50);
+        console.log("🚀 Swarm started");
     }
 
-    function stopSwarmSystem() {
-
-        if (!swarmInterval) return;
-
-        clearInterval(swarmInterval);
-        swarmInterval = null;
-
-        console.log("⏸️ Swarm Engine Stopped");
+    function stop() {
+        clearInterval(interval);
+        interval = null;
     }
 
-    function resetSwarmSystem() {
-
-        stopSwarmSystem();
-
+    function reset() {
+        stop();
         window.swarmAgents = [];
         window.globalTasks = [];
-
         initialized = false;
-
-        console.log("🔄 Swarm Reset Complete");
     }
 
-    // ===============================
-    // GLOBAL EXPORT
-    // ===============================
     window.SwarmControl = {
-        start: startSwarmSystem,
-        stop: stopSwarmSystem,
-        reset: resetSwarmSystem
+        start,
+        stop,
+        reset
     };
 
 })();
