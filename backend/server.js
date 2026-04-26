@@ -9,8 +9,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import "dotenv/config";
-import fetch from "node-fetch";
-
 // ===============================
 // PATH SETUP (ESM SAFE)
 // ===============================
