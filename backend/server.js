@@ -1,3 +1,7 @@
+// =============================================================================
+// MeshRescue | Vertex Swarm Consensus Server (FINAL HACKATHON VERSION)
+// =============================================================================
+
 import express from "express";
 import http from "http";
 import { WebSocketServer } from "ws";
@@ -12,9 +16,7 @@ import "dotenv/config";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ===============================
-// SERVER INIT
-// ===============================
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
@@ -33,25 +35,28 @@ const VERTEX_API_KEY = process.env.VERTEX_API_KEY;
 const VERTEX_MODEL = process.env.VERTEX_MODEL || "gemini-1.5-flash";
 
 // ===============================
-// STATE
+// STATE (DERIVED FROM EVENTS)
 // ===============================
 const agents = new Map();
 const tasks = new Map();
 const events = new Map();
 
+// latest known event pointer (DAG head)
+let lastEventId = null;
+
 // ===============================
-// TASK POOL
+// TASK SEED POOL
 // ===============================
 const TASK_POOL = [
-    { name: "Hospital Emergency", x: 120, y: 150 },
-    { name: "Flood Zone", x: 420, y: 300 },
-    { name: "Building Fire", x: 700, y: 200 },
-    { name: "Traffic Accident", x: 600, y: 420 },
-    { name: "Gas Leak", x: 250, y: 360 }
+    { name: "Hospital Emergency", x: 120, y: 150, priority: "high" },
+    { name: "Flood Zone", x: 420, y: 300, priority: "high" },
+    { name: "Building Fire", x: 700, y: 200, priority: "critical" },
+    { name: "Traffic Accident", x: 600, y: 420, priority: "medium" },
+    { name: "Gas Leak", x: 250, y: 360, priority: "critical" }
 ];
 
 // ===============================
-// BROADCAST UTIL
+// BROADCAST
 // ===============================
 function broadcast(msg) {
     const data = JSON.stringify(msg);
@@ -64,7 +69,7 @@ function broadcast(msg) {
 }
 
 // ===============================
-// VERTEX AI
+// VERTEX AI (REAL USE)
 // ===============================
 async function vertexAnalyze(prompt) {
     if (!VERTEX_API_KEY) return null;
@@ -90,7 +95,7 @@ async function vertexAnalyze(prompt) {
 }
 
 // ===============================
-// EVENT ENGINE (DAG + P2P)
+// DAG EVENT CREATION (CORE UPGRADE)
 // ===============================
 async function createEvent({ creator, type, payload }) {
 
@@ -100,13 +105,20 @@ async function createEvent({ creator, type, payload }) {
         type,
         payload,
         timestamp: Date.now(),
-        parents: []
+        parents: lastEventId ? [lastEventId] : [],
+        height: events.size
     };
 
+    // update DAG pointer
+    lastEventId = event.id;
+
+    // store event
     events.set(event.id, event);
 
+    // apply deterministic state transition
     await applyEvent(event);
 
+    // propagate
     gossip(event);
     syncState(event);
 
@@ -114,26 +126,54 @@ async function createEvent({ creator, type, payload }) {
 }
 
 // ===============================
-// STATE TRANSITIONS
+// VALIDATION LAYER (LIGHT CONSENSUS)
+// ===============================
+function isValidEvent(event) {
+
+    if (!event || !event.type) return false;
+
+    if (event.type === "TASK_CLAIM") {
+        const task = tasks.get(event.payload.taskId);
+        if (!task || task.claimedBy) return false;
+    }
+
+    if (event.type === "TASK_COMPLETE") {
+        const task = tasks.get(event.payload.taskId);
+        if (!task || task.claimedBy !== event.payload.agentId) return false;
+    }
+
+    return true;
+}
+
+// ===============================
+// STATE TRANSITION ENGINE
 // ===============================
 async function applyEvent(event) {
 
+    if (!isValidEvent(event)) return;
+
     const { type, payload } = event;
 
+    // =========================
+    // TASK CREATE (AI PRIORITY)
+    // =========================
     if (type === "TASK_CREATE") {
 
         const ai = await vertexAnalyze(
-            `Classify emergency priority (low, medium, high): ${JSON.stringify(payload)}`
+            `Rank emergency severity (low/medium/high/critical) and justify briefly: ${JSON.stringify(payload)}`
         );
 
         tasks.set(payload.id, {
             ...payload,
             claimedBy: null,
             completed: false,
-            aiInsight: ai || "no-ai"
+            aiInsight: ai || payload.location?.priority || "medium"
         });
     }
 
+    // =========================
+    // TASK CLAIM
+    // =========================
     if (type === "TASK_CLAIM") {
         const task = tasks.get(payload.taskId);
         if (task && !task.claimedBy) {
@@ -141,6 +181,9 @@ async function applyEvent(event) {
         }
     }
 
+    // =========================
+    // TASK COMPLETE
+    // =========================
     if (type === "TASK_COMPLETE") {
         const task = tasks.get(payload.taskId);
         if (task && task.claimedBy === payload.agentId) {
@@ -148,18 +191,26 @@ async function applyEvent(event) {
         }
     }
 
+    // =========================
+    // AGENT MOVE
+    // =========================
     if (type === "AGENT_MOVE") {
         const agent = agents.get(payload.agentId);
         if (agent) {
             agent.x = payload.x;
             agent.y = payload.y;
+            agent.status = payload.status || agent.status;
         }
     }
 
+    // =========================
+    // AGENT DOWN
+    // =========================
     if (type === "AGENT_DOWN") {
+
         agents.delete(payload.agentId);
 
-        // release tasks owned by dead agent
+        // release tasks (auto-recovery)
         for (const t of tasks.values()) {
             if (t.claimedBy === payload.agentId) {
                 t.claimedBy = null;
@@ -169,24 +220,25 @@ async function applyEvent(event) {
 }
 
 // ===============================
-// GOSSIP (P2P SIMULATION)
+// GOSSIP (DETERMINISTIC TTL STYLE)
 // ===============================
 function gossip(event) {
 
     const packet = JSON.stringify({
         type: "GOSSIP_EVENT",
-        event
+        event,
+        ttl: 3
     });
 
     for (const client of wss.clients) {
-        if (client.readyState === 1 && Math.random() > 0.25) {
+        if (client.readyState === 1) {
             client.send(packet);
         }
     }
 }
 
 // ===============================
-// STATE SYNC (FIXED CRITICAL BUG)
+// STATE SYNC (SOURCE OF TRUTH)
 // ===============================
 function syncState(event) {
 
@@ -198,14 +250,14 @@ function syncState(event) {
         },
         meta: {
             eventId: event.id,
-            type: event.type,
+            parents: event.parents,
             timestamp: event.timestamp
         }
     });
 }
 
 // ===============================
-// TASK GENERATION
+// TASK GENERATION (AI AWARE)
 // ===============================
 function spawnTask() {
 
@@ -223,7 +275,7 @@ function spawnTask() {
 }
 
 // ===============================
-// WEBSOCKET
+// WEBSOCKET LAYER
 // ===============================
 wss.on("connection", (ws) => {
 
@@ -238,7 +290,7 @@ wss.on("connection", (ws) => {
             return;
         }
 
-        // REGISTER AGENT (FIXED SYNC ISSUE)
+        // REGISTER
         if (msg.type === "REGISTER") {
 
             agentId = msg.id;
@@ -256,9 +308,7 @@ wss.on("connection", (ws) => {
                 tasks: Array.from(tasks.values())
             }));
 
-            // immediate sync to all clients
-            syncState({ id: "init", type: "INIT", timestamp: Date.now() });
-
+            syncState({ id: "INIT", type: "INIT", timestamp: Date.now() });
             return;
         }
 
@@ -298,6 +348,6 @@ setInterval(() => {
 // START
 // ===============================
 server.listen(PORT, () => {
-    console.log("🚀 MeshRescue Vertex Swarm Running");
+    console.log("🚀 MeshRescue Vertex Swarm (FINAL MODE)");
     console.log(`🌐 http://localhost:${PORT}`);
 });
