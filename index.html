@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Meshrescue | Vertex Swarm System</title>
+    <title>MeshRescue | Vertex Swarm System</title>
 
     <link rel="stylesheet" href="frontend/style.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
@@ -17,7 +17,6 @@
         <h1>Meshrescue System</h1>
         <p>Initializing Vertex DAG Consensus Layer...</p>
         <div class="loader"></div>
-
         <small id="bootStatus">Loading modules...</small>
     </div>
 </div>
@@ -26,7 +25,7 @@
 <header class="header">
 
     <div class="logo">
-        <h1>MeshRescue System</h1>
+        <h1>Meshrescue System</h1>
         <div class="tagline">Vertex Swarm Coordination System</div>
     </div>
 
@@ -43,11 +42,10 @@
         </div>
 
         <div class="status-item">
-            <span class="label">Swarm State</span>
+            <span class="label">Swarm</span>
             <span id="swarmState" class="value">Idle</span>
         </div>
 
-        <!-- Vertex Mode -->
         <div class="status-item">
             <span class="label">Vertex</span>
             <span id="vertexStatus" class="value">
@@ -55,26 +53,22 @@
             </span>
         </div>
 
-        <!-- Sync Progress -->
         <div class="status-item">
             <span class="label">Sync</span>
             <span id="syncStatus" class="value">0%</span>
         </div>
 
-        <!-- NEW: Latency -->
         <div class="status-item">
             <span class="label">Latency</span>
             <span id="latencyStatus" class="value">--ms</span>
         </div>
 
-        <!-- NEW: Consensus Round -->
         <div class="status-item">
             <span class="label">Round</span>
             <span id="roundStatus" class="value">0</span>
         </div>
 
     </div>
-
 </header>
 
 <!-- ================= MAIN ================= -->
@@ -98,11 +92,22 @@
             <span id="zoneInfo">Zones: syncing vertex graph...</span>
         </div>
 
+        <!-- ================= NEW: CONSENSUS BAR ================= -->
+        <div class="panel">
+            <h3>Consensus Progress</h3>
+            <div style="width:100%; height:10px; background:#1e293b; border-radius:6px; overflow:hidden;">
+                <div id="consensusBar"
+                     style="width:0%; height:100%; background:#22c55e; transition:0.3s;">
+                </div>
+            </div>
+        </div>
+
     </section>
 
     <!-- ================= SIDE PANEL ================= -->
     <aside class="side-panel">
 
+        <!-- CONTROL -->
         <div class="panel">
             <h3>Control Panel</h3>
 
@@ -112,6 +117,7 @@
             <button id="resetBtn" class="btn danger">Reset System</button>
         </div>
 
+        <!-- METRICS -->
         <div class="panel">
             <h3>Live Metrics</h3>
 
@@ -121,12 +127,12 @@
             </div>
 
             <div class="metric">
-                <span>Tasks Assigned</span>
+                <span>Tasks</span>
                 <strong id="tasksAssigned">0</strong>
             </div>
 
             <div class="metric">
-                <span>Completed Tasks</span>
+                <span>Completed</span>
                 <strong id="tasksCompleted">0</strong>
             </div>
 
@@ -136,13 +142,27 @@
             </div>
         </div>
 
+        <!-- ================= NEW: P2P NETWORK VIEW ================= -->
+        <div class="panel">
+            <h3>P2P Network View</h3>
+            <div id="networkGraph" style="height:120px; background:#000; border-radius:8px;"></div>
+        </div>
+
+        <!-- ================= NEW: DAG EVENT FLOW ================= -->
+        <div class="panel">
+            <h3>Vertex DAG Events</h3>
+            <div id="dagStream" style="height:140px; overflow:auto; font-size:11px; color:#94a3b8;"></div>
+        </div>
+
+        <!-- LOGS -->
         <div class="panel logs-panel">
             <h3>System Logs</h3>
             <div id="logs"></div>
         </div>
 
+        <!-- EVENT STREAM -->
         <div class="panel event-panel">
-            <h3>Vertex Event Stream</h3>
+            <h3>Gossip Stream</h3>
             <div id="eventStream"></div>
         </div>
 
@@ -152,15 +172,15 @@
 
 <!-- ================= FOOTER ================= -->
 <footer class="footer">
-    Meshrescue © 2026 | Vertex 
+    MeshRescue © 2026 | Vertex Swarm Intelligence Layer
 </footer>
- 
+
+<!-- ================= SCRIPTS ================= -->
 <script type="module" src="frontend/protocol.js"></script>
 <script type="module" src="frontend/agents.js"></script>
 <script type="module" src="frontend/main.js"></script>
-    
 
-<!-- Boot UX -->
+<!-- BOOT UX -->
 <script>
 window.addEventListener("load", () => {
     setTimeout(() => {
