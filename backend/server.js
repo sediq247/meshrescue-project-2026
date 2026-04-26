@@ -1,7 +1,3 @@
-// =============================================================================
-// MeshRescue | Vertex Swarm Consensus Server (P2P + Gossip + AI)
-// =============================================================================
-
 import express from "express";
 import http from "http";
 import { WebSocketServer } from "ws";
@@ -9,8 +5,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import "dotenv/config";
+
 // ===============================
-// PATH SETUP (ESM SAFE)
+// PATH SETUP
 // ===============================
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,11 +33,11 @@ const VERTEX_API_KEY = process.env.VERTEX_API_KEY;
 const VERTEX_MODEL = process.env.VERTEX_MODEL || "gemini-1.5-flash";
 
 // ===============================
-// GLOBAL STATE (LIGHTWEIGHT)
+// STATE
 // ===============================
 const agents = new Map();
 const tasks = new Map();
-const events = new Map(); // DAG storage
+const events = new Map();
 
 // ===============================
 // TASK POOL
@@ -54,7 +51,20 @@ const TASK_POOL = [
 ];
 
 // ===============================
-// VERTEX AI (OPTIONAL)
+// BROADCAST UTIL
+// ===============================
+function broadcast(msg) {
+    const data = JSON.stringify(msg);
+
+    for (const client of wss.clients) {
+        if (client.readyState === 1) {
+            client.send(data);
+        }
+    }
+}
+
+// ===============================
+// VERTEX AI
 // ===============================
 async function vertexAnalyze(prompt) {
     if (!VERTEX_API_KEY) return null;
@@ -80,9 +90,9 @@ async function vertexAnalyze(prompt) {
 }
 
 // ===============================
-// EVENT (VERTEX STYLE)
+// EVENT ENGINE (DAG + P2P)
 // ===============================
-function createEvent({ creator, type, payload }) {
+async function createEvent({ creator, type, payload }) {
 
     const event = {
         id: crypto.randomUUID(),
@@ -90,20 +100,21 @@ function createEvent({ creator, type, payload }) {
         type,
         payload,
         timestamp: Date.now(),
-        parents: [], // DAG placeholder
+        parents: []
     };
 
     events.set(event.id, event);
 
-    applyEvent(event);
-    gossipEvent(event);
-    broadcastState(event);
+    await applyEvent(event);
+
+    gossip(event);
+    syncState(event);
 
     return event;
 }
 
 // ===============================
-// APPLY EVENT → STATE TRANSITION
+// STATE TRANSITIONS
 // ===============================
 async function applyEvent(event) {
 
@@ -112,7 +123,7 @@ async function applyEvent(event) {
     if (type === "TASK_CREATE") {
 
         const ai = await vertexAnalyze(
-            `Classify emergency priority and explain briefly: ${JSON.stringify(payload)}`
+            `Classify emergency priority (low, medium, high): ${JSON.stringify(payload)}`
         );
 
         tasks.set(payload.id, {
@@ -147,32 +158,39 @@ async function applyEvent(event) {
 
     if (type === "AGENT_DOWN") {
         agents.delete(payload.agentId);
+
+        // release tasks owned by dead agent
+        for (const t of tasks.values()) {
+            if (t.claimedBy === payload.agentId) {
+                t.claimedBy = null;
+            }
+        }
     }
 }
 
 // ===============================
-// GOSSIP (P2P PROOF 🔥)
+// GOSSIP (P2P SIMULATION)
 // ===============================
-function gossipEvent(event) {
+function gossip(event) {
 
     const packet = JSON.stringify({
         type: "GOSSIP_EVENT",
         event
     });
 
-    wss.clients.forEach(client => {
-        if (client.readyState === 1 && Math.random() > 0.2) {
-            client.send(packet); // partial spread (true gossip behavior)
+    for (const client of wss.clients) {
+        if (client.readyState === 1 && Math.random() > 0.25) {
+            client.send(packet);
         }
-    });
+    }
 }
 
 // ===============================
-// BROADCAST STATE (UI SYNC)
+// STATE SYNC (FIXED CRITICAL BUG)
 // ===============================
-function broadcastState(event) {
+function syncState(event) {
 
-    const payload = JSON.stringify({
+    broadcast({
         type: "STATE_UPDATE",
         state: {
             tasks: Array.from(tasks.values()),
@@ -184,16 +202,10 @@ function broadcastState(event) {
             timestamp: event.timestamp
         }
     });
-
-    wss.clients.forEach(client => {
-        if (client.readyState === 1) {
-            client.send(payload);
-        }
-    });
 }
 
 // ===============================
-// TASK CREATION LOOP
+// TASK GENERATION
 // ===============================
 function spawnTask() {
 
@@ -211,7 +223,7 @@ function spawnTask() {
 }
 
 // ===============================
-// WEBSOCKET LAYER
+// WEBSOCKET
 // ===============================
 wss.on("connection", (ws) => {
 
@@ -226,9 +238,7 @@ wss.on("connection", (ws) => {
             return;
         }
 
-        // ===========================
-        // REGISTER
-        // ===========================
+        // REGISTER AGENT (FIXED SYNC ISSUE)
         if (msg.type === "REGISTER") {
 
             agentId = msg.id;
@@ -246,12 +256,13 @@ wss.on("connection", (ws) => {
                 tasks: Array.from(tasks.values())
             }));
 
+            // immediate sync to all clients
+            syncState({ id: "init", type: "INIT", timestamp: Date.now() });
+
             return;
         }
 
-        // ===========================
-        // EVENT PIPELINE (KEY 🔥)
-        // ===========================
+        // EVENT PIPELINE
         if (msg.type === "EVENT") {
 
             await createEvent({
@@ -263,6 +274,7 @@ wss.on("connection", (ws) => {
     });
 
     ws.on("close", () => {
+
         if (!agentId) return;
 
         createEvent({
@@ -276,16 +288,16 @@ wss.on("connection", (ws) => {
 });
 
 // ===============================
-// START SERVER
+// TASK LOOP
+// ===============================
+setInterval(() => {
+    if (Math.random() < 0.7) spawnTask();
+}, 6000);
+
+// ===============================
+// START
 // ===============================
 server.listen(PORT, () => {
-
     console.log("🚀 MeshRescue Vertex Swarm Running");
     console.log(`🌐 http://localhost:${PORT}`);
-
-    setInterval(() => {
-        if (Math.random() < 0.7) {
-            spawnTask();
-        }
-    }, 6000);
 });
