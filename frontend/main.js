@@ -1,5 +1,5 @@
 // ===============================================
-// MeshRescue | Vertex Swarm Visualization Engine 
+// MeshRescue | Vertex Swarm Visualization Engine
 // ===============================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -44,10 +44,15 @@ document.addEventListener("DOMContentLoaded", () => {
     let round = 0;
     let failures = 0;
 
+    const gossipLines = [];
+
     const getAgents = () => window.swarmAgents || [];
     const getTasks = () => window.globalTasks || [];
 
-    function updateBoot() {
+    // ===============================
+    // BOOT SEQUENCE
+    // ===============================
+    function bootSequence() {
         const steps = [
             "Loading modules...",
             "Initializing DAG...",
@@ -87,6 +92,21 @@ document.addEventListener("DOMContentLoaded", () => {
         el.logs.scrollTop = el.logs.scrollHeight;
     }
 
+    function eventLog(msg) {
+        if (!el.eventStream) return;
+        const div = document.createElement("div");
+        div.className = "event-item";
+        div.textContent = msg;
+        el.eventStream.appendChild(div);
+
+        if (el.eventStream.children.length > 40) {
+            el.eventStream.removeChild(el.eventStream.firstChild);
+        }
+    }
+
+    // ===============================
+    // CAMERA SYSTEM
+    // ===============================
     function autoFit() {
         const agents = getAgents();
         const tasks = getTasks();
@@ -146,7 +166,58 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // DRAW
+    // GOSSIP LINES (P2P VISUALIZATION)
+    // ===============================
+    function drawGossip() {
+        for (let i = gossipLines.length - 1; i >= 0; i--) {
+
+            const g = gossipLines[i];
+
+            if (!g.from || !g.to) {
+                gossipLines.splice(i, 1);
+                continue;
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(g.from.x, g.from.y);
+            ctx.lineTo(g.to.x, g.to.y);
+
+            ctx.strokeStyle = `rgba(34,197,94,${g.life / 40})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            g.life--;
+
+            if (g.life <= 0) {
+                gossipLines.splice(i, 1);
+            }
+        }
+    }
+
+    // Listen for gossip events from protocol
+    window.addEventListener("gossip-event", (e) => {
+
+        const event = e.detail;
+        if (!event?.creator) return;
+
+        const agents = getAgents();
+        const from = agents.find(a => a.id === event.creator);
+        if (!from) return;
+
+        const targets = agents
+            .filter(a => a.id !== from.id && a.status !== "dead")
+            .sort(() => 0.5 - Math.random())
+            .slice(0, 2);
+
+        for (const t of targets) {
+            gossipLines.push({ from, to: t, life: 40 });
+        }
+
+        eventLog(`📡 ${event.type} from ${event.creator}`);
+    });
+
+    // ===============================
+    // DRAW SYSTEM
     // ===============================
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -158,6 +229,7 @@ document.addEventListener("DOMContentLoaded", () => {
         drawGrid();
         drawTasks();
         drawConnections();
+        drawGossip(); // 🔥 P2P VISUAL LAYER
         drawAgents();
 
         ctx.restore();
@@ -238,7 +310,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // ===============================
+    // UI UPDATE
+    // ===============================
     function updateUI() {
+
         const agents = getAgents();
         const tasks = getTasks();
 
@@ -247,22 +323,14 @@ document.addEventListener("DOMContentLoaded", () => {
         el.tasksAssigned.textContent = tasks.length;
         el.tasksCompleted.textContent = tasks.filter(t => t?.completed).length;
 
-        // Vertex sync simulation
-        if (vertexReady) {
-            syncProgress = Math.min(100, syncProgress + Math.random() * 5);
-        }
-
+        if (vertexReady) syncProgress = Math.min(100, syncProgress + Math.random() * 5);
         el.syncStatus.textContent = `${Math.floor(syncProgress)}%`;
 
-        // latency simulation
-        const latency = Math.floor(20 + Math.random() * 40);
-        el.latencyStatus.textContent = `${latency}ms`;
+        el.latencyStatus.textContent = `${Math.floor(20 + Math.random() * 40)}ms`;
 
-        // round simulation
         if (running && Math.random() < 0.05) round++;
         el.roundStatus.textContent = round;
 
-        // network
         const Protocol = window.MeshProtocol;
 
         if (Protocol?.isConnected?.()) {
@@ -290,7 +358,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // CONTROLS (SAFE BINDING)
+    // CONTROLS
     // ===============================
     const startBtn = document.getElementById("startBtn");
     const pauseBtn = document.getElementById("pauseBtn");
@@ -338,9 +406,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const agent = agents[Math.floor(Math.random() * agents.length)];
 
         failures++;
-        if (window.MeshProtocol) {
-            window.MeshProtocol.removeAgent(agent.id);
-        }
+
+        window.MeshProtocol?.removeAgent(agent.id);
 
         log(`${agent.id} injected failure`);
     };
