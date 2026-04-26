@@ -1,5 +1,5 @@
 // ===============================================
-// MeshRescue | Vertex Swarm Visualization Engine (UPGRADED P2P)
+// MeshRescue | Vertex Swarm Visualization Engine (FINALIST BUILD)
 // ===============================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -7,6 +7,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const canvas = document.getElementById("swarmCanvas");
     const ctx = canvas.getContext("2d");
 
+    // ===============================
+    // UI ELEMENTS
+    // ===============================
     const el = {
         bootStatus: document.getElementById("bootStatus"),
 
@@ -19,8 +22,6 @@ document.addEventListener("DOMContentLoaded", () => {
         latencyStatus: document.getElementById("latencyStatus"),
         roundStatus: document.getElementById("roundStatus"),
 
-        zoneInfo: document.getElementById("zoneInfo"),
-
         activeAgents: document.getElementById("activeAgents"),
         tasksAssigned: document.getElementById("tasksAssigned"),
         tasksCompleted: document.getElementById("tasksCompleted"),
@@ -31,25 +32,33 @@ document.addEventListener("DOMContentLoaded", () => {
         peerCount: document.getElementById("peerCount"),
     };
 
+    // ===============================
+    // STATE
+    // ===============================
     let zoom = 1;
     let offsetX = 0;
     let offsetY = 0;
 
     let running = false;
-    let autoFollow = true;
-
     let vertexReady = false;
+
     let syncProgress = 0;
     let round = 0;
     let failures = 0;
 
     const gossipLines = [];
 
+    // ===============================
+    // DAG STATE (FINAL FIX)
+    // ===============================
+    const dagNodes = new Map();
+    const dagEdges = [];
+
     const getAgents = () => window.swarmAgents || [];
     const getTasks = () => window.globalTasks || [];
 
     // ===============================
-    // RESIZE FIX (CRITICAL)
+    // CANVAS RESIZE
     // ===============================
     function resizeCanvas() {
         canvas.width = canvas.offsetWidth;
@@ -58,36 +67,40 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("resize", resizeCanvas);
 
     // ===============================
-    // BOOT
+    // BOOT SEQUENCE
     // ===============================
     function bootSequence() {
+
         const steps = [
             "Loading modules...",
-            "Initializing DAG...",
+            "Initializing DAG engine...",
             "Syncing swarm state...",
             "Connecting Vertex protocol...",
-            "Finalizing consensus engine..."
+            "Finalizing consensus layer..."
         ];
 
         let i = 0;
 
         const interval = setInterval(() => {
+
             el.bootStatus.textContent = steps[i];
 
             i++;
+
             if (i >= steps.length) {
                 clearInterval(interval);
 
                 setTimeout(() => {
                     vertexReady = true;
                     el.vertexStatus.innerHTML = `<span class="dot online"></span> Active`;
-                }, 400);
+                }, 500);
             }
+
         }, 400);
     }
 
     // ===============================
-    // LOGS
+    // LOGGING
     // ===============================
     function log(msg) {
         const p = document.createElement("p");
@@ -107,9 +120,39 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // P2P EVENT LISTENER (IMPORTANT PROOF)
+    // 🔥 REAL DAG INGESTION (FINAL FIX)
+    // ===============================
+    window.addEventListener("swarm-update", () => {
+
+        const meta = window.__lastEvent;
+        if (!meta?.eventId) return;
+
+        if (!dagNodes.has(meta.eventId)) {
+
+            dagNodes.set(meta.eventId, {
+                id: meta.eventId,
+                type: meta.type,
+                timestamp: meta.timestamp,
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height
+            });
+
+            const nodes = Array.from(dagNodes.values());
+
+            if (nodes.length > 1) {
+                dagEdges.push({
+                    from: nodes[nodes.length - 2].id,
+                    to: meta.eventId
+                });
+            }
+        }
+    });
+
+    // ===============================
+    // P2P GOSSIP VISUALIZATION
     // ===============================
     window.addEventListener("gossip-event", (e) => {
+
         const event = e.detail;
         if (!event?.creator) return;
 
@@ -119,73 +162,66 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const targets = agents
             .filter(a => a.id !== from.id && a.status !== "dead")
-            .sort(() => 0.5 - Math.random())
             .slice(0, 3);
 
         for (const t of targets) {
-            gossipLines.push({ from, to: t, life: 45 });
+            gossipLines.push({
+                from,
+                to: t,
+                life: 50,
+                strength: Math.random()
+            });
         }
 
         eventLog(`📡 ${event.type} → ${event.creator}`);
     });
 
     // ===============================
-    // CAMERA
+    // DAG RENDER (FINAL VERSION)
     // ===============================
-    function autoFit() {
-        const agents = getAgents();
-        const tasks = getTasks();
+    function drawDAG() {
 
-        const points = [
-            ...tasks.map(t => t?.location).filter(Boolean),
-            ...agents
-        ];
+        const nodes = Array.from(dagNodes.values());
 
-        if (!points.length) return;
+        // EDGES
+        ctx.strokeStyle = "rgba(56,189,248,0.25)";
+        ctx.lineWidth = 1;
 
-        let minX = Infinity, minY = Infinity;
-        let maxX = -Infinity, maxY = -Infinity;
+        for (const edge of dagEdges) {
 
-        for (const p of points) {
-            minX = Math.min(minX, p.x);
-            minY = Math.min(minY, p.y);
-            maxX = Math.max(maxX, p.x);
-            maxY = Math.max(maxY, p.y);
+            const from = dagNodes.get(edge.from);
+            const to = dagNodes.get(edge.to);
+
+            if (!from || !to) continue;
+
+            ctx.beginPath();
+            ctx.moveTo(from.x, from.y);
+            ctx.lineTo(to.x, to.y);
+            ctx.stroke();
         }
 
-        const padding = 150;
-        zoom = Math.min(canvas.width / ((maxX - minX) + padding),
-                        canvas.height / ((maxY - minY) + padding),
-                        1.6);
+        // NODES
+        for (const node of nodes) {
 
-        offsetX = -(minX - padding / 2) * zoom;
-        offsetY = -(minY - padding / 2) * zoom;
-    }
+            let color = "#38bdf8";
 
-    function updateCamera() {
-        if (!autoFollow) return;
+            if (node.type === "TASK_CREATE") color = "#22c55e";
+            if (node.type === "TASK_CLAIM") color = "#f59e0b";
+            if (node.type === "TASK_COMPLETE") color = "#10b981";
+            if (node.type === "AGENT_DOWN") color = "#ef4444";
 
-        const all = [...getAgents(), ...getTasks().map(t => t?.location).filter(Boolean)];
-        if (!all.length) return;
-
-        let cx = 0, cy = 0;
-
-        for (const p of all) {
-            cx += p.x;
-            cy += p.y;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
         }
-
-        cx /= all.length;
-        cy /= all.length;
-
-        offsetX = canvas.width / 2 - cx * zoom;
-        offsetY = canvas.height / 2 - cy * zoom;
     }
 
     // ===============================
-    // DRAW GOSSIP (P2P VISUAL)
+    // GOSSIP LINES
     // ===============================
     function drawGossip() {
+
         for (let i = gossipLines.length - 1; i >= 0; i--) {
 
             const g = gossipLines[i];
@@ -194,7 +230,7 @@ document.addEventListener("DOMContentLoaded", () => {
             ctx.moveTo(g.from.x, g.from.y);
             ctx.lineTo(g.to.x, g.to.y);
 
-            ctx.strokeStyle = `rgba(34,197,94,${g.life / 45})`;
+            ctx.strokeStyle = `rgba(34,197,94,${g.life / 50})`;
             ctx.lineWidth = 2;
             ctx.stroke();
 
@@ -205,16 +241,99 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ===============================
-    // DRAW
+    // GRID
+    // ===============================
+    function drawGrid() {
+
+        ctx.strokeStyle = "rgba(255,255,255,0.04)";
+        ctx.lineWidth = 1;
+
+        const size = 60;
+
+        for (let x = 0; x < canvas.width; x += size) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+
+        for (let y = 0; y < canvas.height; y += size) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+    }
+
+    // ===============================
+    // DRAW AGENTS + TASKS
+    // ===============================
+    function drawAgents() {
+
+        for (const a of getAgents()) {
+
+            ctx.beginPath();
+            ctx.arc(a.x, a.y, 6, 0, Math.PI * 2);
+
+            ctx.fillStyle =
+                a.status === "busy" ? "#f59e0b" :
+                a.status === "dead" ? "#ef4444" :
+                "#22c55e";
+
+            ctx.fill();
+
+            ctx.fillStyle = "#fff";
+            ctx.font = "8px Arial";
+            ctx.fillText(a.id, a.x + 6, a.y - 6);
+        }
+    }
+
+    function drawTasks() {
+
+        for (const t of getTasks()) {
+
+            if (!t?.location) continue;
+
+            const l = t.location;
+
+            let color = "#ef4444";
+            if (t.completed) color = "#64748b";
+            else if (t.claimedBy) color = "#f59e0b";
+
+            ctx.beginPath();
+            ctx.arc(l.x, l.y, 6, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+    }
+
+    function drawConnections() {
+
+        for (const a of getAgents()) {
+            if (!a.target) continue;
+
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(a.target.x, a.target.y);
+            ctx.strokeStyle = "rgba(245,158,11,0.3)";
+            ctx.stroke();
+        }
+    }
+
+    // ===============================
+    // MAIN RENDER LOOP
     // ===============================
     function draw() {
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         ctx.save();
+
         ctx.translate(offsetX, offsetY);
         ctx.scale(zoom, zoom);
 
         drawGrid();
+        drawDAG();        // 🔥 CORE FEATURE
         drawTasks();
         drawConnections();
         drawGossip();
@@ -223,124 +342,60 @@ document.addEventListener("DOMContentLoaded", () => {
         ctx.restore();
     }
 
-    function drawGrid() {
-        ctx.strokeStyle = "rgba(255,255,255,0.04)";
-        ctx.lineWidth = 1;
-
-        const size = 60;
-
-        for (let x = -1000; x < canvas.width + 1000; x += size) {
-            ctx.beginPath();
-            ctx.moveTo(x, -1000);
-            ctx.lineTo(x, canvas.height + 1000);
-            ctx.stroke();
-        }
-
-        for (let y = -1000; y < canvas.height + 1000; y += size) {
-            ctx.beginPath();
-            ctx.moveTo(-1000, y);
-            ctx.lineTo(canvas.width + 1000, y);
-            ctx.stroke();
-        }
-    }
-
-    function drawTasks() {
-        for (const task of getTasks()) {
-            if (!task?.location) continue;
-
-            const loc = task.location;
-
-            let color = "#ef4444";
-            if (task.completed) color = "#64748b";
-            else if (task.claimedBy) color = "#f59e0b";
-
-            ctx.beginPath();
-            ctx.arc(loc.x, loc.y, 6, 0, Math.PI * 2);
-            ctx.fillStyle = color;
-            ctx.fill();
-
-            ctx.fillStyle = "#fff";
-            ctx.font = "9px Arial";
-            ctx.fillText(loc.name || "task", loc.x + 8, loc.y - 6);
-        }
-    }
-
-    function drawAgents() {
-        for (const agent of getAgents()) {
-
-            ctx.beginPath();
-            ctx.arc(agent.x, agent.y, 6, 0, Math.PI * 2);
-            ctx.fillStyle = agent.status === "busy" ? "#f59e0b" : "#22c55e";
-            ctx.fill();
-
-            ctx.fillStyle = "#ccc";
-            ctx.font = "8px Arial";
-            ctx.fillText(agent.id, agent.x + 6, agent.y - 6);
-        }
-    }
-
-    function drawConnections() {
-        for (const agent of getAgents()) {
-            if (!agent?.target) continue;
-
-            ctx.beginPath();
-            ctx.moveTo(agent.x, agent.y);
-            ctx.lineTo(agent.target.x, agent.target.y);
-            ctx.strokeStyle = "rgba(245,158,11,0.3)";
-            ctx.stroke();
-        }
-    }
-
-    // ===============================
-    // UI UPDATE (P2P PROOF INCLUDED)
-    // ===============================
     function updateUI() {
 
         const agents = getAgents();
         const tasks = getTasks();
 
         el.agentCount.textContent = agents.length;
-        el.activeAgents.textContent = agents.filter(a => a?.status !== "dead").length;
+        el.activeAgents.textContent = agents.filter(a => a.status !== "dead").length;
         el.tasksAssigned.textContent = tasks.length;
-        el.tasksCompleted.textContent = tasks.filter(t => t?.completed).length;
+        el.tasksCompleted.textContent = tasks.filter(t => t.completed).length;
 
-        el.syncStatus.textContent = `${Math.floor(syncProgress)}%`;
-        el.latencyStatus.textContent = `${Math.floor(20 + Math.random() * 40)}ms`;
+        el.latencyStatus.textContent = `${20 + Math.floor(Math.random() * 40)}ms`;
 
         if (running && Math.random() < 0.05) round++;
         el.roundStatus.textContent = round;
 
-        const Protocol = window.MeshProtocol;
+        el.peerCount.textContent = window.MeshProtocol?.getPeers?.()?.size || 0;
 
-        el.peerCount.textContent = Protocol?.getPeers?.()?.size || 0;
+        el.networkStatus.textContent =
+            window.MeshProtocol?.isConnected?.() ? "P2P Active" : "Local";
 
-        if (Protocol?.isConnected?.()) {
-            el.networkStatus.textContent = "P2P Active";
-            el.networkStatus.style.color = "#22c55e";
-        } else {
-            el.networkStatus.textContent = "Local";
-            el.networkStatus.style.color = "#f59e0b";
-        }
+        el.networkStatus.style.color =
+            window.MeshProtocol?.isConnected?.() ? "#22c55e" : "#f59e0b";
 
         el.failures.textContent = failures;
 
         if (vertexReady) {
-            syncProgress = Math.min(100, syncProgress + Math.random() * 3);
+            syncProgress = Math.min(100, syncProgress + Math.random() * 2);
         }
+
+        el.syncStatus.textContent = `${Math.floor(syncProgress)}%`;
     }
 
     // ===============================
     // LOOP
     // ===============================
     function animate() {
+
         if (!running) return;
 
-        updateCamera();
         updateUI();
         draw();
 
         requestAnimationFrame(animate);
     }
+
+    // ===============================
+    // INIT
+    // ===============================
+    resizeCanvas();
+    bootSequence();
+    updateUI();
+    draw();
+
+    setInterval(updateUI, 400);
 
     // ===============================
     // CONTROLS
@@ -364,37 +419,24 @@ document.addEventListener("DOMContentLoaded", () => {
         running = false;
         window.SwarmControl?.reset();
 
-        zoom = 1;
-        offsetX = 0;
-        offsetY = 0;
-        syncProgress = 0;
-        round = 0;
+        dagNodes.clear();
+        dagEdges.length = 0;
 
         el.swarmState.textContent = "Idle";
-
-        autoFit();
+        log("System reset");
         draw();
-        log("Reset complete");
     };
 
     document.getElementById("killAgentBtn").onclick = () => {
-        const agents = getAgents().filter(a => a?.status !== "dead");
-        if (!agents.length) return;
 
-        const agent = agents[Math.floor(Math.random() * agents.length)];
+        const alive = getAgents().filter(a => a.status !== "dead");
+        if (!alive.length) return;
+
+        const agent = alive[Math.floor(Math.random() * alive.length)];
         failures++;
 
         window.MeshProtocol?.removeAgent(agent.id);
+
         log(`${agent.id} failed`);
     };
-
-    // ===============================
-    // INIT
-    // ===============================
-    resizeCanvas();
-    bootSequence();
-    autoFit();
-    updateUI();
-    draw();
-    setInterval(updateUI, 400);
 });
