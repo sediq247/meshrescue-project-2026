@@ -15,7 +15,7 @@
     window.swarmAgents = [];
 
     // ===============================
-    // AGENT FACTORY
+    // AGENT FACTORY (VERTEX STABLE)
     // ===============================
     function createAgents(count = 10) {
 
@@ -25,13 +25,14 @@
 
             const agent = {
                 id: agentNames[i],
-                x: Math.random() * 900,
-                y: Math.random() * 600,
+                x: 100 + Math.random() * 700,
+                y: 100 + Math.random() * 400,
                 status: "idle",
-                speed: 1.2 + Math.random(),
+                speed: 1.2 + Math.random() * 0.8,
                 target: null,
                 claimedTask: null,
-                lastAction: 0
+                lastAction: 0,
+                lastSync: 0
             };
 
             window.swarmAgents.push(agent);
@@ -41,7 +42,7 @@
     }
 
     // ===============================
-    // DECISION ENGINE
+    // DECISION ENGINE (IMPROVED)
     // ===============================
     function decide(agent) {
 
@@ -60,7 +61,9 @@
             const dy = task.location.y - agent.y;
 
             const dist = dx * dx + dy * dy;
-            const score = dist + Math.random() * 10;
+
+            // deterministic + slight randomness for emergence
+            const score = dist * 0.9 + Math.random() * 5;
 
             if (score < bestScore) {
                 bestScore = score;
@@ -69,23 +72,29 @@
         }
 
         if (!best) return;
-        if (Date.now() - agent.lastAction < 300) return;
+        if (Date.now() - agent.lastAction < 250) return;
 
         agent.status = "busy";
         agent.target = best.location;
         agent.claimedTask = best;
         agent.lastAction = Date.now();
 
+        // 🔥 P2P claim attempt
         Protocol.claimTask(agent.id, best.id);
     }
 
     // ===============================
-    // MOVEMENT ENGINE (P2P ENABLED)
+    // MOVEMENT ENGINE (VERTEX SYNC FIXED)
     // ===============================
     function move(agent) {
 
         if (agent.status === "dead") return;
 
+        let moved = false;
+
+        // ===============================
+        // TASK MOVEMENT
+        // ===============================
         if (agent.status === "busy" && agent.target) {
 
             const dx = agent.target.x - agent.x;
@@ -103,21 +112,35 @@
                 agent.claimedTask = null;
 
             } else {
+
                 agent.x += (dx / dist) * agent.speed;
                 agent.y += (dy / dist) * agent.speed;
+
+                moved = true;
             }
 
         } else {
             agent.x += (Math.random() - 0.5) * 1.0;
             agent.y += (Math.random() - 0.5) * 1.0;
+
+            moved = true;
         }
 
-        // 🔥 CRITICAL: BROADCAST MOVEMENT (P2P PROOF)
-        Protocol.sendMove?.(agent.id, agent.x, agent.y);
+        // ===============================
+        // 🔥 VERTEX P2P SYNC (FIXED)
+        // ===============================
+        const now = Date.now();
+
+        if (moved && now - agent.lastSync > 100) {
+
+            Protocol.move(agent.id, agent.x, agent.y, agent.status);
+
+            agent.lastSync = now;
+        }
     }
 
     // ===============================
-    // SERVER RECONCILIATION
+    // RECONCILIATION (CRITICAL FIX)
     // ===============================
     function reconcile() {
 
@@ -129,7 +152,11 @@
 
             const serverTask = tasks.find(t => t.id === agent.claimedTask.id);
 
-            if (!serverTask || serverTask.completed || serverTask.claimedBy !== agent.id) {
+            if (
+                !serverTask ||
+                serverTask.completed ||
+                serverTask.claimedBy !== agent.id
+            ) {
                 agent.status = "idle";
                 agent.target = null;
                 agent.claimedTask = null;
@@ -138,11 +165,11 @@
     }
 
     // ===============================
-    // FAILURE SIMULATION
+    // FAILURE SIMULATION (SAFE)
     // ===============================
     function randomFailure() {
 
-        if (Math.random() < 0.004) {
+        if (Math.random() < 0.003) {
 
             const alive = window.swarmAgents.filter(a => a.status !== "dead");
             if (!alive.length) return;
@@ -156,7 +183,7 @@
     }
 
     // ===============================
-    // LOOP
+    // MAIN LOOP (OPTIMIZED)
     // ===============================
     function loop() {
 
@@ -184,11 +211,11 @@
         if (!initialized) {
             createAgents(10);
             initialized = true;
-            console.log("🧠 Swarm initialized");
+            console.log("🧠 Vertex Swarm Initialized");
         }
 
         interval = setInterval(loop, 50);
-        console.log("🚀 Swarm started");
+        console.log("🚀 Vertex Swarm Running");
     }
 
     function stop() {
