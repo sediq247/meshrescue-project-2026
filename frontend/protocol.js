@@ -1,16 +1,18 @@
-protocol 
 (function () {
 
-    const socket = new WebSocket(`ws://${location.host}`);
+    const protocol = location.protocol === "https:" ? "wss" : "ws";
+    const socket = new WebSocket(`${protocol}://${location.host}`);
+
     let connected = false;
 
     // ===============================
-    // CLIENT STATE (SYNCED FROM SERVER)
+    // CLIENT STATE (P2P OBSERVATION)
     // ===============================
     const state = {
         peers: new Map(),
         lastEvent: null,
-        eventLog: []
+        eventLog: [],
+        gossipCount: 0
     };
 
     function send(type, data = {}) {
@@ -24,12 +26,12 @@ protocol
     // ===============================
     socket.onopen = () => {
         connected = true;
-        console.log("🟢 Vertex connected");
+        console.log("🟢 P2P Vertex Connected");
     };
 
     socket.onclose = () => {
         connected = false;
-        console.log("🔴 Vertex disconnected");
+        console.log("🔴 Disconnected");
     };
 
     socket.onerror = () => {
@@ -50,11 +52,11 @@ protocol
     // ===============================
     function handle(msg) {
 
-        // store last event (for DAG trace UI)
+        // 🔥 Track ALL events (for DAG / judge panel)
         state.lastEvent = msg;
         state.eventLog.push(msg);
 
-        if (state.eventLog.length > 100) {
+        if (state.eventLog.length > 200) {
             state.eventLog.shift();
         }
 
@@ -63,33 +65,88 @@ protocol
             case "READY":
                 break;
 
-            case "STATE_UPDATE":
-                window.globalTasks = msg.state?.tasks || [];
-                window.swarmAgents = msg.state?.agents || [];
-                break;
-
             case "INIT":
                 window.globalTasks = msg.tasks || [];
                 window.swarmAgents = msg.agents || [];
                 break;
 
-            case "GOSSIP_EVENT":
+            case "STATE_UPDATE":
+                window.globalTasks = msg.state?.tasks || [];
+                window.swarmAgents = msg.state?.agents || [];
+
+                // 🔥 Notify UI (important for real-time proof)
+                window.dispatchEvent(new CustomEvent("swarm-update"));
                 break;
 
             // ===============================
-            // 🔥 VERTEX AI / JUDGE EXTENSION
+            // 🔥 GOSSIP (CORE P2P PROOF)
+            // ===============================
+            case "GOSSIP_EVENT":
+
+                state.gossipCount++;
+
+                // send to UI (draw lines / event stream)
+                window.dispatchEvent(new CustomEvent("gossip-event", {
+                    detail: msg.event
+                }));
+
+                break;
+
+            // ===============================
+            // OPTIONAL DIRECT EVENTS (BACKWARD SAFE)
+            // ===============================
+            case "TASK_CREATED":
+                window.globalTasks.push(msg.task);
+                break;
+
+            case "AGENT_JOINED":
+                window.swarmAgents.push(msg.agent);
+                break;
+
+            case "AGENT_MOVED":
+                {
+                    const a = window.swarmAgents.find(a => a.id === msg.id);
+                    if (a) {
+                        a.x = msg.x;
+                        a.y = msg.y;
+                    }
+                }
+                break;
+
+            case "TASK_CLAIMED":
+                {
+                    const t = window.globalTasks.find(t => t.id === msg.taskId);
+                    if (t) t.claimedBy = msg.agentId;
+                }
+                break;
+
+            case "TASK_COMPLETED":
+                {
+                    const t = window.globalTasks.find(t => t.id === msg.taskId);
+                    if (t) t.completed = true;
+                }
+                break;
+
+            case "AGENT_LEFT":
+                window.swarmAgents = window.swarmAgents.filter(a => a.id !== msg.id);
+                break;
+
+            // ===============================
+            // 🔥 AI / VERTEX EXTENSION
             // ===============================
             case "ANOMALY_ALERT":
             case "VERTEX_REASONING":
+
                 window.dispatchEvent(new CustomEvent("vertex-ai", {
                     detail: msg.payload
                 }));
+
                 break;
         }
     }
 
     // ===============================
-    // PUBLIC API (INTENT LAYER ONLY)
+    // PUBLIC API (INTENT ONLY)
     // ===============================
     window.MeshProtocol = {
 
@@ -100,18 +157,17 @@ protocol
 
         removeAgent(agentId) {
             state.peers.delete(agentId);
-            send("AGENT_DOWN", { agentId });
-        },
-
-        announceTask(task) {
             send("EVENT", {
                 payload: {
-                    type: "TASK_ANNOUNCE",
-                    data: task
+                    type: "AGENT_DOWN",
+                    data: { agentId }
                 }
             });
         },
 
+        // ===============================
+        // 🔥 CORE SWARM ACTIONS
+        // ===============================
         claimTask(agentId, taskId) {
             send("EVENT", {
                 payload: {
@@ -130,13 +186,27 @@ protocol
             });
         },
 
+        move(agentId, x, y) {
+            send("EVENT", {
+                payload: {
+                    type: "AGENT_MOVE",
+                    data: { agentId, x, y }
+                }
+            });
+        },
+
+        // ===============================
+        // STATUS / DEBUG (FOR JUDGES)
+        // ===============================
         isConnected: () => connected,
 
         getPeers: () => state.peers,
 
         getEventLog: () => state.eventLog,
 
-        getLastEvent: () => state.lastEvent
+        getLastEvent: () => state.lastEvent,
+
+        getGossipCount: () => state.gossipCount
     };
 
 })();
