@@ -1,4 +1,4 @@
-# MeshRescue System — Vertex Swarm Intelligence & P2P Coordination System
+# Meshrescue System — Vertex Swarm Intelligence & P2P Coordination System
 
 > A decentralized peer-to-peer swarm intelligence system for coordinating autonomous agents in real-time emergency response scenarios using event-driven consensus and Vertex AI-enhanced reasoning.
 
