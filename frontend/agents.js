@@ -41,7 +41,7 @@
     }
 
     // ===============================
-    // DECISION ENGINE (LIGHTWEIGHT INTENT ONLY)
+    // DECISION ENGINE
     // ===============================
     function decide(agent) {
 
@@ -60,7 +60,6 @@
             const dy = task.location.y - agent.y;
 
             const dist = dx * dx + dy * dy;
-
             const score = dist + Math.random() * 10;
 
             if (score < bestScore) {
@@ -70,7 +69,6 @@
         }
 
         if (!best) return;
-
         if (Date.now() - agent.lastAction < 300) return;
 
         agent.status = "busy";
@@ -82,7 +80,7 @@
     }
 
     // ===============================
-    // MOVEMENT ENGINE
+    // MOVEMENT ENGINE (P2P ENABLED)
     // ===============================
     function move(agent) {
 
@@ -96,7 +94,6 @@
 
             if (dist < 4) {
 
-                // only send intent — server decides final state
                 if (agent.claimedTask) {
                     Protocol.completeTask(agent.id, agent.claimedTask.id);
                 }
@@ -114,8 +111,14 @@
             agent.x += (Math.random() - 0.5) * 1.0;
             agent.y += (Math.random() - 0.5) * 1.0;
         }
+
+        // 🔥 CRITICAL: BROADCAST MOVEMENT (P2P PROOF)
+        Protocol.sendMove?.(agent.id, agent.x, agent.y);
     }
 
+    // ===============================
+    // SERVER RECONCILIATION
+    // ===============================
     function reconcile() {
 
         const tasks = window.globalTasks || [];
@@ -126,7 +129,6 @@
 
             const serverTask = tasks.find(t => t.id === agent.claimedTask.id);
 
-            // server says task is already done or taken
             if (!serverTask || serverTask.completed || serverTask.claimedBy !== agent.id) {
                 agent.status = "idle";
                 agent.target = null;
