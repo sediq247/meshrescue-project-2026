@@ -40,19 +40,32 @@
 
     socket.onmessage = (e) => {
         try {
-            const msg = JSON.parse(e.data);
-            handle(msg);
+            handle(JSON.parse(e.data));
         } catch (err) {
             console.warn("Invalid message", err);
         }
     };
 
     // ===============================
+    // SAFE ARRAY HELPERS (FIX DUPLICATION BUG)
+    // ===============================
+    function upsert(arr, item, key = "id") {
+        const index = arr.findIndex(x => x[key] === item[key]);
+        if (index === -1) arr.push(item);
+        else arr[index] = { ...arr[index], ...item };
+    }
+
+    function remove(arr, id) {
+        return arr.filter(x => x.id !== id);
+    }
+
+    // ===============================
     // MESSAGE HANDLER
     // ===============================
     function handle(msg) {
 
-        // 🔥 Track ALL events (for DAG / judge panel)
+        if (!msg?.type) return;
+
         state.lastEvent = msg;
         state.eventLog.push(msg);
 
@@ -62,50 +75,69 @@
 
         switch (msg.type) {
 
+            // ===============================
+            // BOOT SYNC
+            // ===============================
             case "READY":
                 break;
 
             case "INIT":
                 window.globalTasks = msg.tasks || [];
                 window.swarmAgents = msg.agents || [];
+                window.dispatchEvent(new CustomEvent("swarm-update"));
                 break;
 
             case "STATE_UPDATE":
                 window.globalTasks = msg.state?.tasks || [];
                 window.swarmAgents = msg.state?.agents || [];
-
-                // 🔥 Notify UI (important for real-time proof)
                 window.dispatchEvent(new CustomEvent("swarm-update"));
                 break;
 
             // ===============================
-            // 🔥 GOSSIP (CORE P2P PROOF)
+            // 🔥 P2P GOSSIP (CORE PROOF)
             // ===============================
             case "GOSSIP_EVENT":
-
                 state.gossipCount++;
 
-                // send to UI (draw lines / event stream)
                 window.dispatchEvent(new CustomEvent("gossip-event", {
                     detail: msg.event
                 }));
-
                 break;
 
             // ===============================
-            // OPTIONAL DIRECT EVENTS (BACKWARD SAFE)
+            // TASK EVENTS (FIXED CONSISTENCY)
             // ===============================
+            case "TASK_CREATE":
             case "TASK_CREATED":
-                window.globalTasks.push(msg.task);
+                if (!window.globalTasks) window.globalTasks = [];
+                upsert(window.globalTasks, msg.task);
                 break;
 
+            case "TASK_CLAIMED":
+                {
+                    const t = window.globalTasks?.find(t => t.id === msg.taskId);
+                    if (t) t.claimedBy = msg.agentId;
+                }
+                break;
+
+            case "TASK_COMPLETED":
+                {
+                    const t = window.globalTasks?.find(t => t.id === msg.taskId);
+                    if (t) t.completed = true;
+                }
+                break;
+
+            // ===============================
+            // AGENT EVENTS
+            // ===============================
             case "AGENT_JOINED":
-                window.swarmAgents.push(msg.agent);
+                if (!window.swarmAgents) window.swarmAgents = [];
+                upsert(window.swarmAgents, msg.agent);
                 break;
 
             case "AGENT_MOVED":
                 {
-                    const a = window.swarmAgents.find(a => a.id === msg.id);
+                    const a = window.swarmAgents?.find(a => a.id === msg.id);
                     if (a) {
                         a.x = msg.x;
                         a.y = msg.y;
@@ -113,40 +145,25 @@
                 }
                 break;
 
-            case "TASK_CLAIMED":
-                {
-                    const t = window.globalTasks.find(t => t.id === msg.taskId);
-                    if (t) t.claimedBy = msg.agentId;
-                }
-                break;
-
-            case "TASK_COMPLETED":
-                {
-                    const t = window.globalTasks.find(t => t.id === msg.taskId);
-                    if (t) t.completed = true;
-                }
-                break;
-
             case "AGENT_LEFT":
-                window.swarmAgents = window.swarmAgents.filter(a => a.id !== msg.id);
+            case "AGENT_DOWN":
+                window.swarmAgents = remove(window.swarmAgents || [], msg.id || msg.agentId);
                 break;
 
             // ===============================
-            // 🔥 AI / VERTEX EXTENSION
+            // VERTEX AI EVENTS
             // ===============================
             case "ANOMALY_ALERT":
             case "VERTEX_REASONING":
-
                 window.dispatchEvent(new CustomEvent("vertex-ai", {
                     detail: msg.payload
                 }));
-
                 break;
         }
     }
 
     // ===============================
-    // PUBLIC API (INTENT ONLY)
+    // PUBLIC API (INTENT LAYER)
     // ===============================
     window.MeshProtocol = {
 
@@ -157,6 +174,7 @@
 
         removeAgent(agentId) {
             state.peers.delete(agentId);
+
             send("EVENT", {
                 payload: {
                     type: "AGENT_DOWN",
@@ -165,9 +183,6 @@
             });
         },
 
-        // ===============================
-        // 🔥 CORE SWARM ACTIONS
-        // ===============================
         claimTask(agentId, taskId) {
             send("EVENT", {
                 payload: {
@@ -196,16 +211,12 @@
         },
 
         // ===============================
-        // STATUS / DEBUG (FOR JUDGES)
+        // DEBUG 
         // ===============================
         isConnected: () => connected,
-
         getPeers: () => state.peers,
-
         getEventLog: () => state.eventLog,
-
         getLastEvent: () => state.lastEvent,
-
         getGossipCount: () => state.gossipCount
     };
 
